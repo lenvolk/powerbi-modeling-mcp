@@ -1,0 +1,167 @@
+using System.ComponentModel;
+using System.Text;
+using Azure.Identity;
+using ModelContextProtocol;
+using ModelContextProtocol.Server;
+using PowerBiMcpServer.Models;
+using PowerBiMcpServer.Services;
+
+namespace PowerBiMcpServer.Tools;
+
+/// <summary>
+/// Tools for connecting to Power BI semantic models.
+/// Supports Power BI Desktop (local), Fabric workspace (remote), and PBIP folders.
+/// </summary>
+[McpServerToolType]
+public sealed class ConnectionTools
+{
+    private readonly ConnectionManager _cm;
+    private readonly PowerBiDesktopDiscovery _discovery;
+    private readonly TmdlService _tmdl;
+
+    public ConnectionTools(ConnectionManager cm, PowerBiDesktopDiscovery discovery, TmdlService tmdl)
+    {
+        _cm        = cm;
+        _discovery = discovery;
+        _tmdl      = tmdl;
+    }
+
+    // ── Power BI Desktop ────────────────────────────────────────────────────
+
+    [McpServerTool(Name = "connection_connect_desktop",
+        Title = "Connect to Power BI Desktop",
+        ReadOnly = true, Idempotent = true)]
+    [Description("Discovers running Power BI Desktop instances and connects to the one matching the given file name. "
+        + "Returns a connection ID to use with other tools. If no file name is provided, lists all running instances.")]
+    public string ConnectDesktop(
+        [Description("Name (or partial name) of the .pbix file open in Power BI Desktop. Leave empty to list running instances.")]
+        string? fileName = null)
+    {
+        var instances = _discovery.Discover();
+
+        if (instances.Count == 0)
+            return "No running Power BI Desktop instances found. Please open a .pbix file in Power BI Desktop first.";
+
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            var sb = new StringBuilder("## Running Power BI Desktop instances\n\n");
+            foreach (var inst in instances)
+                sb.AppendLine($"- **{inst.FileName}** — port {inst.Port}");
+            sb.AppendLine("\nProvide the file name to connect.");
+            return sb.ToString();
+        }
+
+        var match = _discovery.FindByFileName(fileName);
+        if (match is null)
+            return $"No Power BI Desktop instance found matching '{fileName}'. Running instances:\n"
+                 + string.Join("\n", instances.Select(i => $"  - {i.FileName}"));
+
+        var id = _cm.Connect(match.ConnectionString, match.FileName, ConnectionKind.PowerBIDesktop);
+        return $"Connected to **{match.FileName}** (connection `{id}`). You can now use this connection ID with other tools.";
+    }
+
+    // ── Fabric Workspace ────────────────────────────────────────────────────
+
+    [McpServerTool(Name = "connection_connect_fabric",
+        Title = "Connect to Fabric Workspace",
+        ReadOnly = true, Idempotent = true)]
+    [Description("Connects to a semantic model in a Microsoft Fabric workspace via the XMLA endpoint. "
+        + "Authenticates using Azure Identity (DefaultAzureCredential) or the PBI_MODELING_MCP_ACCESS_TOKEN environment variable.")]
+    public string ConnectFabric(
+        [Description("Name of the Fabric workspace")] string workspaceName,
+        [Description("Name of the semantic model (database)")] string semanticModelName)
+    {
+        // Build XMLA endpoint
+        var xmlaEndpoint = $"powerbi://api.powerbi.com/v1.0/myorg/{Uri.EscapeDataString(workspaceName)}";
+
+        // Determine access token
+        var envToken = Environment.GetEnvironmentVariable("PBI_MODELING_MCP_ACCESS_TOKEN");
+        string connectionString;
+
+        if (!string.IsNullOrEmpty(envToken))
+        {
+            connectionString = $"Data Source={xmlaEndpoint};Initial Catalog={semanticModelName};"
+                             + $"Password={envToken};";
+        }
+        else
+        {
+            // Use DefaultAzureCredential (interactive browser, managed identity, etc.)
+            try
+            {
+                var credential = new DefaultAzureCredential();
+                var token = credential.GetToken(
+                    new Azure.Core.TokenRequestContext(new[] { "https://analysis.windows.net/powerbi/api/.default" }));
+                connectionString = $"Data Source={xmlaEndpoint};Initial Catalog={semanticModelName};"
+                                 + $"Password={token.Token};";
+            }
+            catch (Exception ex)
+            {
+                return $"Error: Authentication failed. Set PBI_MODELING_MCP_ACCESS_TOKEN or sign in via Azure CLI.\n{ex.Message}";
+            }
+        }
+
+        var id = _cm.Connect(connectionString, semanticModelName, ConnectionKind.FabricWorkspace,
+            databaseName: semanticModelName, workspaceName: workspaceName);
+
+        return $"Connected to **{semanticModelName}** in workspace **{workspaceName}** (connection `{id}`).";
+    }
+
+    // ── PBIP / TMDL ─────────────────────────────────────────────────────────
+
+    [McpServerTool(Name = "connection_open_pbip",
+        Title = "Open Semantic Model from PBIP",
+        ReadOnly = true, Idempotent = true)]
+    [Description("Opens a semantic model from a Power BI Project (PBIP) TMDL folder. "
+        + "This is an offline connection that works with TMDL files on disk.")]
+    public string OpenPbip(
+        [Description("Path to the definition/ (TMDL) folder inside the .SemanticModel directory")] string tmdlFolderPath)
+    {
+        try
+        {
+            var summary = _tmdl.GetModelSummary(tmdlFolderPath);
+
+            // For PBIP we don't connect via XMLA; instead we load the model in memory.
+            // Create a local server instance for TOM operations.
+            var id = _cm.Connect($"DataSource=localhost;Persist Security Info=false;",
+                Path.GetFileName(Path.GetDirectoryName(tmdlFolderPath) ?? tmdlFolderPath),
+                ConnectionKind.PbipFolder);
+
+            return $"Loaded PBIP model from `{tmdlFolderPath}`\n\n{summary}\n\nConnection: `{id}`";
+        }
+        catch (Exception ex)
+        {
+            return $"Error loading TMDL folder: {ex.Message}";
+        }
+    }
+
+    // ── List / Disconnect ───────────────────────────────────────────────────
+
+    [McpServerTool(Name = "connection_list",
+        Title = "List Active Connections",
+        ReadOnly = true, Idempotent = true)]
+    [Description("Lists all active connections to Power BI semantic models.")]
+    public string ListConnections()
+    {
+        var conns = _cm.ListConnections();
+        if (conns.Count == 0)
+            return "No active connections. Use connection_connect_desktop, connection_connect_fabric, or connection_open_pbip to connect.";
+
+        var sb = new StringBuilder("## Active Connections\n\n");
+        foreach (var c in conns)
+        {
+            sb.AppendLine($"- **{c.Name}** (`{c.Id}`) — {c.Kind}, connected {c.ConnectedAt:u}");
+        }
+        return sb.ToString();
+    }
+
+    [McpServerTool(Name = "connection_disconnect",
+        Title = "Disconnect",
+        ReadOnly = false, Idempotent = true)]
+    [Description("Disconnects from a semantic model and releases resources.")]
+    public string Disconnect(
+        [Description("Connection ID returned by a connect operation")] string connectionId)
+    {
+        _cm.Disconnect(connectionId);
+        return $"Disconnected `{connectionId}`.";
+    }
+}
