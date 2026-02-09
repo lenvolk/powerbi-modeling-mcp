@@ -1,0 +1,13 @@
+{
+  "servers": {
+    "powerbi-mcp-server": {
+      "type": "stdio",
+      "command": "dotnet",
+      "args": [
+        "run",
+        "--project",
+        "${workspaceFolder}/src/PowerBiMcpServer/PowerBiMcpServer.csproj"
+      ]
+    }
+  }
+}
