@@ -38,8 +38,13 @@ public sealed class PowerBiDesktopDiscovery
 
                 if (!File.Exists(portFile)) continue;
 
-                var portStr = File.ReadAllText(portFile).Trim();
-                if (!int.TryParse(portStr, out var port)) continue;
+                var portStr = File.ReadAllText(portFile, System.Text.Encoding.Unicode).Trim();
+                if (!int.TryParse(portStr, out var port))
+                {
+                    // Fallback: try stripping null characters in case of encoding mismatch
+                    portStr = new string(portStr.Where(c => c != '\0').ToArray()).Trim();
+                    if (!int.TryParse(portStr, out port)) continue;
+                }
 
                 // Try to figure out the associated .pbix file name from the PBI Desktop
                 // process that owns this workspace folder.
@@ -94,7 +99,6 @@ public sealed class PowerBiDesktopDiscovery
             }
         }
         catch { }
-
         return null;
     }
 }
