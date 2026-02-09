@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("powerbi-mcp-server")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+229d510b3743663d563a0189d598ee696bfbdc1f")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+630ec1c1bdbeb06848ffb6f4892021c99f0f795b")]
 [assembly: System.Reflection.AssemblyProductAttribute("powerbi-mcp-server")]
 [assembly: System.Reflection.AssemblyTitleAttribute("powerbi-mcp-server")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

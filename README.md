@@ -6,24 +6,76 @@ Open-source C#/.NET 8 MCP server for Power BI semantic models with **stdio + HTT
 
 **Prerequisites:** [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
 
+### 1. Build
+
 ```bash
-# Clone and build
 git clone https://github.com/microsoft/powerbi-modeling-mcp.git -b demo
 cd powerbi-modeling-mcp
 dotnet build src/PowerBiMcpServer
+```
 
-# Run — stdio (default, works with VS Code / GitHub Copilot)
-dotnet run --project src/PowerBiMcpServer
+### 2. Start the server (HTTP mode)
 
-# Run — HTTP transport
+```bash
 dotnet run --project src/PowerBiMcpServer -- --transport http --port 5100
 ```
 
-When running in HTTP mode, the MCP endpoint is at `http://localhost:5100/mcp` and a health check is at `http://localhost:5100/healthz`.
+The server runs in the foreground. Keep this terminal open. You should see output on stderr confirming:
 
-## VS Code Integration
+```
+Power BI MCP Server listening on http://127.0.0.1:5100/mcp
+Health endpoint: http://127.0.0.1:5100/healthz
+```
 
-This repo includes a `.vscode/mcp.json` for stdio mode. Open the workspace in VS Code with [GitHub Copilot](https://marketplace.visualstudio.com/items?itemName=GitHub.copilot) installed and the MCP server is ready to use.
+### 3. Verify it's running
+
+Open a second terminal and check the health endpoint:
+
+```bash
+curl http://localhost:5100/healthz
+```
+
+Expected response:
+
+```json
+{"status":"healthy","transport":"http","version":"1.0.0","connections":0}
+```
+
+### 4. Connect VS Code
+
+This repo includes a `.vscode/mcp.json` that points to the running server. Open the workspace in VS Code with [GitHub Copilot](https://marketplace.visualstudio.com/items?itemName=GitHub.copilot) installed, then restart the MCP server from the Command Palette (**MCP: List Servers** > **powerbi-mcp-server** > **Restart Server**). You should see "46 tools" discovered.
+
+> **Important:** Unlike stdio mode, the HTTP server must be started manually *before* VS Code can connect. If you see a "fetch failed" error, make sure the server is running (step 2).
+
+## VS Code MCP Configuration
+
+The `.vscode/mcp.json` in this repo is pre-configured for HTTP mode:
+
+```jsonc
+{
+  "servers": {
+    // HTTP transport — connect to the server running on localhost
+    // Start the server first: dotnet run --project src/PowerBiMcpServer -- --transport http --port 5100
+    "powerbi-mcp-server": {
+      "type": "sse",
+      "url": "http://localhost:5100/mcp"
+    }
+
+    // stdio transport — launches the server as a child process (uncomment to use instead)
+    // "powerbi-mcp-server": {
+    //   "type": "stdio",
+    //   "command": "dotnet",
+    //   "args": [
+    //     "run",
+    //     "--project",
+    //     "${workspaceFolder}/src/PowerBiMcpServer/PowerBiMcpServer.csproj"
+    //   ]
+    // }
+  }
+}
+```
+
+To switch to stdio mode (server launches automatically with VS Code), comment out the SSE block and uncomment the stdio block.
 
 ## CLI Options
 

@@ -1,13 +1,21 @@
 {
   "servers": {
+    // HTTP transport — connect to the server running on localhost
+    // Start the server first: dotnet run --project src/PowerBiMcpServer -- --transport http --port 5100
     "powerbi-mcp-server": {
-      "type": "stdio",
-      "command": "dotnet",
-      "args": [
-        "run",
-        "--project",
-        "${workspaceFolder}/src/PowerBiMcpServer/PowerBiMcpServer.csproj"
-      ]
+      "type": "sse",
+      "url": "http://localhost:5100/mcp"
     }
+
+    // stdio transport — launches the server as a child process (uncomment to use instead)
+    // "powerbi-mcp-server": {
+    //   "type": "stdio",
+    //   "command": "dotnet",
+    //   "args": [
+    //     "run",
+    //     "--project",
+    //     "${workspaceFolder}/src/PowerBiMcpServer/PowerBiMcpServer.csproj"
+    //   ]
+    // }
   }
 }
