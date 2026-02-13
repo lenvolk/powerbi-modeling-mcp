@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Text;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
 using PowerBiMcpServer.Services;
@@ -49,7 +48,9 @@ public sealed class DaxQueryTools
     {
         try
         {
-            var dax = $"EVALUATE ROW(\"{label}\", {expression})";
+            // Escape double quotes in label to prevent DAX injection
+            var safeLabel = label.Replace("\"", "\"\"");
+            var dax = $"EVALUATE ROW(\"{safeLabel}\", {expression})";
             return _cm.ExecuteDaxQuery(connectionId, dax);
         }
         catch (Exception ex) { return $"Error: {ex.Message}"; }
@@ -72,7 +73,7 @@ SELECTCOLUMNS(
     ""Column"", [ATTRIBUTE_NAME],
     ""DataType"", [DATATYPE],
     ""EncodingType"", [DICTIONARY_ISRESIDENT],
-    ""Rows"", [COLUMN_CARDINALITY]
+    ""DictionarySize"", [DICTIONARY_SIZE]
 )
 ORDER BY [Table], [Column]";
 
@@ -95,15 +96,14 @@ EVALUATE
 SELECTCOLUMNS(
     INFO.RELATIONSHIPS(),
     ""ID"", [ID],
-    ""FromTable"", [FROMTABLEID],
-    ""FromColumn"", [FROMCOLUMNID],
-    ""ToTable"", [TOTABLEID],
-    ""ToColumn"", [TOCOLUMNID],
-    ""IsActive"", [ISACTIVE],
-    ""CrossFilter"", [CROSSFILTERINGBEHAVIOR],
-    ""JoinOn"", [JOINONDATE_BEHAVIOR],
-    ""MissingKeys"", [MISSINGKEYS],
-    ""InvalidRows"", [INVALIDROWS]
+    ""FromTableID"", [FromTableID],
+    ""FromColumnID"", [FromColumnID],
+    ""ToTableID"", [ToTableID],
+    ""ToColumnID"", [ToColumnID],
+    ""IsActive"", [IsActive],
+    ""CrossFilter"", [CrossFilteringBehavior],
+    ""JoinOnDate"", [JoinOnDateBehavior],
+    ""RelyOnRefIntegrity"", [RelyOnReferentialIntegrity]
 )";
 
             return _cm.ExecuteDaxQuery(connectionId, dax);
@@ -124,14 +124,14 @@ SELECTCOLUMNS(
 EVALUATE
 SELECTCOLUMNS(
     INFO.MEASURES(),
-    ""Table"", [MEASUREGROUP_NAME],
-    ""Measure"", [MEASURE_NAME],
-    ""Expression"", [EXPRESSION],
-    ""DataType"", [DATATYPE],
-    ""IsHidden"", [MEASURE_IS_VISIBLE],
-    ""DisplayFolder"", [MEASURE_DISPLAY_FOLDER]
+    ""Measure"", [Name],
+    ""Expression"", [Expression],
+    ""DataType"", [DataType],
+    ""IsHidden"", [IsHidden],
+    ""FormatString"", [FormatString],
+    ""DisplayFolder"", [DisplayFolder]
 )
-ORDER BY [Table], [Measure]";
+ORDER BY [Measure]";
 
             return _cm.ExecuteDaxQuery(connectionId, dax);
         }
@@ -150,7 +150,9 @@ ORDER BY [Table], [Measure]";
         try
         {
             topN = Math.Clamp(topN, 1, 1000);
-            var dax = $"EVALUATE TOPN({topN}, '{tableName}')";
+            // Escape single quotes in table name to prevent DAX injection
+            var safeTableName = tableName.Replace("'", "''");
+            var dax = $"EVALUATE TOPN({topN}, '{safeTableName}')";
             return _cm.ExecuteDaxQuery(connectionId, dax);
         }
         catch (Exception ex) { return $"Error: {ex.Message}"; }
@@ -169,7 +171,10 @@ ORDER BY [Table], [Measure]";
         try
         {
             topN = Math.Clamp(topN, 1, 5000);
-            var dax = $"EVALUATE TOPN({topN}, DISTINCT('{tableName}'[{columnName}]))";
+            // Escape single quotes and brackets to prevent DAX injection
+            var safeTableName = tableName.Replace("'", "''");
+            var safeColumnName = columnName.Replace("]", "]]");
+            var dax = $"EVALUATE TOPN({topN}, DISTINCT('{safeTableName}'[{safeColumnName}]))";
             return _cm.ExecuteDaxQuery(connectionId, dax);
         }
         catch (Exception ex) { return $"Error: {ex.Message}"; }

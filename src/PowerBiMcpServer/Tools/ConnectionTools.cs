@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text;
+using System.Text.RegularExpressions;
 using Azure.Identity;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
@@ -44,14 +45,17 @@ public sealed class ConnectionTools
 
         if (string.IsNullOrWhiteSpace(fileName))
         {
-            var sb = new StringBuilder("## Running Power BI Desktop instances\n\n");
+            var sb = new StringBuilder(512);
+            sb.AppendLine("## Running Power BI Desktop instances\n");
             foreach (var inst in instances)
                 sb.AppendLine($"- **{inst.FileName}** — port {inst.Port}");
             sb.AppendLine("\nProvide the file name to connect.");
             return sb.ToString();
         }
 
-        var match = _discovery.FindByFileName(fileName);
+        // Search the already-discovered list instead of calling Discover() again
+        var match = instances.FirstOrDefault(i =>
+            i.FileName.Contains(fileName, StringComparison.OrdinalIgnoreCase));
         if (match is null)
             return $"No Power BI Desktop instance found matching '{fileName}'. Running instances:\n"
                  + string.Join("\n", instances.Select(i => $"  - {i.FileName}"));
@@ -146,10 +150,15 @@ public sealed class ConnectionTools
         if (conns.Count == 0)
             return "No active connections. Use connection_connect_desktop, connection_connect_fabric, or connection_open_pbip to connect.";
 
-        var sb = new StringBuilder("## Active Connections\n\n");
+        var sb = new StringBuilder(1024);
+        sb.AppendLine("## Active Connections\n");
         foreach (var c in conns)
         {
+            // Redact passwords/tokens from connection strings for security
+            var safeConnStr = Regex.Replace(c.ConnectionString, 
+                @"Password=[^;]+", "Password=***", RegexOptions.IgnoreCase);
             sb.AppendLine($"- **{c.Name}** (`{c.Id}`) — {c.Kind}, connected {c.ConnectedAt:u}");
+            sb.AppendLine($"  Connection: `{safeConnStr}`");
         }
         return sb.ToString();
     }

@@ -14,7 +14,12 @@ using PowerBiMcpServer.Tools;
 // ── CLI argument parsing ────────────────────────────────────────────────────
 var transport  = GetArg(args, "--transport", "stdio");           // stdio | http
 var host       = GetArg(args, "--host", "127.0.0.1");           // bind address
-var port       = int.Parse(GetArg(args, "--port", "5100"));     // listen port
+var portStr    = GetArg(args, "--port", "5100");
+if (!int.TryParse(portStr, out var port) || port < 1 || port > 65535)
+{
+    Console.Error.WriteLine($"Error: Invalid port number '{portStr}'. Must be between 1 and 65535.");
+    Environment.Exit(1);
+}
 var mode       = args.Contains("--readonly") ? "readonly" : "readwrite";
 var skipConfirm = args.Contains("--skipconfirmation");
 var compatibility = GetArg(args, "--compatibility", "PowerBI"); // PowerBI | Full
@@ -45,6 +50,11 @@ if (transport.Equals("http", StringComparison.OrdinalIgnoreCase))
     .WithToolsFromAssembly();
 
     var app = builder.Build();
+
+    // Ensure ConnectionManager is disposed on shutdown
+    var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
+    var cm = app.Services.GetRequiredService<ConnectionManager>();
+    lifetime.ApplicationStopping.Register(() => cm.Dispose());
 
     // MCP endpoint
     app.MapMcp("/mcp");
@@ -96,8 +106,14 @@ else
 // ── Helpers ─────────────────────────────────────────────────────────────────
 static string GetArg(string[] args, string name, string defaultValue)
 {
-    for (int i = 0; i < args.Length - 1; i++)
+    for (int i = 0; i < args.Length; i++)
+    {
         if (args[i].Equals(name, StringComparison.OrdinalIgnoreCase))
+        {
+            if (i == args.Length - 1)
+                throw new ArgumentException($"Argument '{name}' requires a value.");
             return args[i + 1];
+        }
+    }
     return defaultValue;
 }

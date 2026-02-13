@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace PowerBiMcpServer.Services;
 
@@ -10,6 +12,13 @@ namespace PowerBiMcpServer.Services;
 /// </summary>
 public sealed class PowerBiDesktopDiscovery
 {
+    private readonly ILogger<PowerBiDesktopDiscovery> _logger;
+
+    public PowerBiDesktopDiscovery(ILogger<PowerBiDesktopDiscovery>? logger = null)
+    {
+        _logger = logger ?? NullLogger<PowerBiDesktopDiscovery>.Instance;
+    }
+
     /// <summary>
     /// Returns a list of (fileName, port) tuples for each running PBI Desktop instance.
     /// </summary>
@@ -31,6 +40,8 @@ public sealed class PowerBiDesktopDiscovery
             if (!Directory.Exists(pbiTempRoot))
                 return results;
 
+            Process[]? pbiProcs = null;
+
             foreach (var workspaceDir in Directory.GetDirectories(pbiTempRoot))
             {
                 var dataDir  = Path.Combine(workspaceDir, "Data");
@@ -46,16 +57,17 @@ public sealed class PowerBiDesktopDiscovery
                     if (!int.TryParse(portStr, out port)) continue;
                 }
 
-                // Try to figure out the associated .pbix file name from the PBI Desktop
-                // process that owns this workspace folder.
-                var fileName = TryGetPbiFileName(workspaceDir) ?? $"Power BI Desktop (port {port})";
+                // Enumerate PBI processes once and reuse across all workspaces
+                pbiProcs ??= GetPbiProcesses();
+
+                var fileName = TryGetPbiFileName(workspaceDir, pbiProcs) ?? $"Power BI Desktop (port {port})";
 
                 results.Add(new PbiDesktopInstance(fileName, port, workspaceDir));
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Swallow — discovery is best-effort
+            _logger.LogWarning(ex, "Power BI Desktop discovery failed: {Message}", ex.Message);
         }
 
         return results;
@@ -71,16 +83,16 @@ public sealed class PowerBiDesktopDiscovery
             i.FileName.Contains(fileName, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static string? TryGetPbiFileName(string workspaceDir)
+    private static Process[] GetPbiProcesses()
+    {
+        var procs = Process.GetProcessesByName("PBIDesktop");
+        return procs.Length > 0 ? procs : Process.GetProcessesByName("Microsoft.PowerBI.Desktop");
+    }
+
+    private static string? TryGetPbiFileName(string workspaceDir, Process[] pbiProcs)
     {
         try
         {
-            // The workspace directory name ends with a PID-like segment.
-            // We can try to correlate by checking running PBIDesktop.exe processes.
-            var pbiProcs = Process.GetProcessesByName("PBIDesktop");
-            if (pbiProcs.Length == 0)
-                pbiProcs = Process.GetProcessesByName("Microsoft.PowerBI.Desktop");
-
             foreach (var proc in pbiProcs)
             {
                 try

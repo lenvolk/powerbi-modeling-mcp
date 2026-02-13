@@ -29,7 +29,7 @@ public sealed class ModelTools
             var model = _cm.GetModel(connectionId);
             var db    = _cm.GetDatabase(connectionId);
 
-            var sb = new StringBuilder();
+            var sb = new StringBuilder(2048);
             sb.AppendLine($"# Model: {db.Name}");
             sb.AppendLine();
             sb.AppendLine($"- **Compatibility Level**: {db.CompatibilityLevel}");

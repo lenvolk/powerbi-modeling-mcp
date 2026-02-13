@@ -71,6 +71,7 @@ public sealed class ConnectionManager : IDisposable
 
         using var cmd = adomd.CreateCommand();
         cmd.CommandText = dax;
+        cmd.CommandTimeout = 300; // 5 minutes
 
         using var reader = cmd.ExecuteReader();
         return FormatReaderAsMarkdown(reader);
@@ -125,6 +126,8 @@ public sealed class ConnectionManager : IDisposable
 
     private static string FormatReaderAsMarkdown(AdomdDataReader reader)
     {
+        const int MAX_ROWS = 10_000; // Prevent memory exhaustion on large result sets
+
         var cols = Enumerable.Range(0, reader.FieldCount)
             .Select(i => reader.GetName(i))
             .ToList();
@@ -133,12 +136,17 @@ public sealed class ConnectionManager : IDisposable
         lines.Add("| " + string.Join(" | ", cols) + " |");
         lines.Add("| " + string.Join(" | ", cols.Select(_ => "---")) + " |");
 
-        while (reader.Read())
+        int rowCount = 0;
+        while (reader.Read() && rowCount < MAX_ROWS)
         {
             var vals = Enumerable.Range(0, reader.FieldCount)
                 .Select(i => reader.IsDBNull(i) ? "" : reader.GetValue(i)?.ToString() ?? "");
             lines.Add("| " + string.Join(" | ", vals) + " |");
+            rowCount++;
         }
+
+        if (rowCount >= MAX_ROWS)
+            lines.Add($"\n⚠️ **Result truncated at {MAX_ROWS:N0} rows**");
 
         return string.Join("\n", lines);
     }

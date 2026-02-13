@@ -27,13 +27,14 @@ public sealed class TableTools
         try
         {
             var model = _cm.GetModel(connectionId);
-            var sb = new StringBuilder("## Tables\n\n");
+            var sb = new StringBuilder(1024);
+            sb.AppendLine("## Tables\n");
             sb.AppendLine("| Table | Columns | Measures | Partitions | Hidden |");
             sb.AppendLine("| --- | --- | --- | --- | --- |");
 
             foreach (var t in model.Tables)
             {
-                sb.AppendLine($"| {t.Name} | {t.Columns.Count} | {t.Measures.Count} | {t.Partitions.Count} | {t.IsHidden} |");
+                sb.AppendLine($"| {EscapeMd(t.Name)} | {t.Columns.Count} | {t.Measures.Count} | {t.Partitions.Count} | {t.IsHidden} |");
             }
             return sb.ToString();
         }
@@ -54,7 +55,7 @@ public sealed class TableTools
             var table = model.Tables.Find(tableName)
                 ?? throw new InvalidOperationException($"Table '{tableName}' not found.");
 
-            var sb = new StringBuilder();
+            var sb = new StringBuilder(2048);
             sb.AppendLine($"# Table: {table.Name}");
             if (!string.IsNullOrEmpty(table.Description))
                 sb.AppendLine($"\n> {table.Description}");
@@ -67,8 +68,8 @@ public sealed class TableTools
             foreach (var col in table.Columns)
             {
                 var sortBy = col.SortByColumn?.Name ?? "";
-                var desc   = col.Description?.Replace("\n", " ") ?? "";
-                sb.AppendLine($"| {col.Name} | {col.DataType} | {col.IsHidden} | {sortBy} | {desc} |");
+                var desc   = EscapeMd(col.Description ?? "");
+                sb.AppendLine($"| {EscapeMd(col.Name)} | {col.DataType} | {col.IsHidden} | {EscapeMd(sortBy)} | {desc} |");
             }
 
             // Measures
@@ -79,10 +80,10 @@ public sealed class TableTools
                 sb.AppendLine("| --- | --- | --- | --- |");
                 foreach (var m in table.Measures)
                 {
-                    var expr = m.Expression?.Replace("\n", " ") ?? "";
-                    var fmt  = m.FormatString ?? "";
-                    var desc = m.Description?.Replace("\n", " ") ?? "";
-                    sb.AppendLine($"| {m.Name} | `{Truncate(expr, 80)}` | {fmt} | {desc} |");
+                    var expr = EscapeMd(m.Expression ?? "");
+                    var fmt  = EscapeMd(m.FormatString ?? "");
+                    var desc = EscapeMd(m.Description ?? "");
+                    sb.AppendLine($"| {EscapeMd(m.Name)} | `{Truncate(expr, 80)}` | {fmt} | {desc} |");
                 }
             }
 
@@ -202,4 +203,7 @@ public sealed class TableTools
 
     private static string Truncate(string s, int max) =>
         s.Length <= max ? s : s[..max] + "…";
+
+    private static string EscapeMd(string s) =>
+        s.Replace("|", "\\|").Replace("\n", " ").Replace("\r", "");
 }

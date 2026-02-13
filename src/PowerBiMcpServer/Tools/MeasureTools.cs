@@ -27,7 +27,7 @@ public sealed class MeasureTools
         try
         {
             var model = _cm.GetModel(connectionId);
-            var sb = new StringBuilder();
+            var sb = new StringBuilder(2048);
 
             var tables = string.IsNullOrWhiteSpace(tableName)
                 ? model.Tables.Cast<Table>()
@@ -40,8 +40,8 @@ public sealed class MeasureTools
             foreach (var table in tables)
             foreach (var m in table.Measures)
             {
-                var expr = Truncate((m.Expression ?? "").Replace("\n", " "), 60);
-                sb.AppendLine($"| {table.Name} | {m.Name} | `{expr}` | {m.FormatString ?? ""} | {m.DisplayFolder ?? ""} |");
+                var expr = Truncate(EscapeMd(m.Expression ?? ""), 60);
+                sb.AppendLine($"| {EscapeMd(table.Name)} | {EscapeMd(m.Name)} | `{expr}` | {EscapeMd(m.FormatString ?? "")} | {EscapeMd(m.DisplayFolder ?? "")} |");
             }
 
             return sb.ToString();
@@ -62,7 +62,7 @@ public sealed class MeasureTools
         {
             var measure = FindMeasure(connectionId, tableName, measureName);
 
-            var sb = new StringBuilder();
+            var sb = new StringBuilder(1024);
             sb.AppendLine($"# Measure: {measure.Name}");
             sb.AppendLine($"- **Table**: {tableName}");
             sb.AppendLine($"- **Format String**: {measure.FormatString ?? "(none)"}");
@@ -244,4 +244,7 @@ public sealed class MeasureTools
 
     private static string Truncate(string s, int max) =>
         s.Length <= max ? s : s[..max] + "…";
+
+    private static string EscapeMd(string s) =>
+        s.Replace("|", "\\|").Replace("\n", " ").Replace("\r", "");
 }

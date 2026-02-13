@@ -109,7 +109,8 @@ public sealed class TmdlTools
             if (!Directory.Exists(directoryPath))
                 return $"Error: Directory not found: `{directoryPath}`";
 
-            var sb = new StringBuilder("## PBIP Project Discovery\n\n");
+            var sb = new StringBuilder(512);
+            sb.AppendLine("## PBIP Project Discovery\n");
 
             // Find .pbip files
             var pbipFiles = Directory.GetFiles(directoryPath, "*.pbip", SearchOption.AllDirectories);
@@ -180,7 +181,8 @@ public sealed class TmdlTools
             if (files.Length == 0)
                 return "No `.tmdl` files found in the folder.";
 
-            var sb = new StringBuilder($"## TMDL Files ({files.Length})\n\n");
+            var sb = new StringBuilder(1024);
+            sb.AppendLine($"## TMDL Files ({files.Length})\n");
             string lastDir = "";
             foreach (var f in files)
             {

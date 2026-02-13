@@ -26,15 +26,16 @@ public sealed class RelationshipTools
         try
         {
             var model = _cm.GetModel(connectionId);
-            var sb = new StringBuilder("## Relationships\n\n");
+            var sb = new StringBuilder(1024);
+            sb.AppendLine("## Relationships\n");
             sb.AppendLine("| # | From Table | From Column | To Table | To Column | Cardinality | Cross Filter | Active |");
             sb.AppendLine("| --- | --- | --- | --- | --- | --- | --- | --- |");
 
             int i = 1;
             foreach (var rel in model.Relationships.OfType<SingleColumnRelationship>())
             {
-                sb.AppendLine($"| {i++} | {rel.FromTable.Name} | {rel.FromColumn.Name} | "
-                    + $"{rel.ToTable.Name} | {rel.ToColumn.Name} | "
+                sb.AppendLine($"| {i++} | {EscapeMd(rel.FromTable.Name)} | {EscapeMd(rel.FromColumn.Name)} | "
+                    + $"{EscapeMd(rel.ToTable.Name)} | {EscapeMd(rel.ToColumn.Name)} | "
                     + $"{rel.FromCardinality}-to-{rel.ToCardinality} | {rel.CrossFilteringBehavior} | {rel.IsActive} |");
             }
 
@@ -166,15 +167,19 @@ public sealed class RelationshipTools
             if (matches.Count == 0)
                 return $"No relationships found involving table '{tableName}'.";
 
-            var sb = new StringBuilder($"## Relationships for {tableName}\n\n");
+            var sb = new StringBuilder(1024);
+            sb.AppendLine($"## Relationships for {tableName}\n");
             foreach (var r in matches)
             {
                 var dir = r.FromTable.Name == tableName ? "→" : "←";
-                sb.AppendLine($"- {r.FromTable.Name}[{r.FromColumn.Name}] {dir} {r.ToTable.Name}[{r.ToColumn.Name}] " +
+                sb.AppendLine($"- {EscapeMd(r.FromTable.Name)}[{EscapeMd(r.FromColumn.Name)}] {dir} {EscapeMd(r.ToTable.Name)}[{EscapeMd(r.ToColumn.Name)}] " +
                     $"({r.FromCardinality}-to-{r.ToCardinality}, {r.CrossFilteringBehavior}, {(r.IsActive ? "active" : "inactive")})");
             }
             return sb.ToString();
         }
         catch (Exception ex) { return $"Error: {ex.Message}"; }
     }
+
+    private static string EscapeMd(string s) =>
+        s.Replace("|", "\\|").Replace("\n", " ").Replace("\r", "");
 }

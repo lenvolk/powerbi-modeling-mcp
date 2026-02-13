@@ -27,16 +27,17 @@ public sealed class ColumnTools
         try
         {
             var table = GetTable(connectionId, tableName);
-            var sb = new StringBuilder($"## Columns in {tableName}\n\n");
+            var sb = new StringBuilder(1024);
+            sb.AppendLine($"## Columns in {tableName}\n");
             sb.AppendLine("| Name | Data Type | Type | Hidden | Format | Description |");
             sb.AppendLine("| --- | --- | --- | --- | --- | --- |");
 
             foreach (var col in table.Columns)
             {
                 var kind = col.Type.ToString();
-                var fmt  = col.FormatString ?? "";
-                var desc = (col.Description ?? "").Replace("\n", " ");
-                sb.AppendLine($"| {col.Name} | {col.DataType} | {kind} | {col.IsHidden} | {fmt} | {desc} |");
+                var fmt  = EscapeMd(col.FormatString ?? "");
+                var desc = EscapeMd(col.Description ?? "");
+                sb.AppendLine($"| {EscapeMd(col.Name)} | {col.DataType} | {kind} | {col.IsHidden} | {fmt} | {desc} |");
             }
             return sb.ToString();
         }
@@ -58,7 +59,7 @@ public sealed class ColumnTools
             var col = table.Columns.Find(columnName)
                 ?? throw new InvalidOperationException($"Column '{columnName}' not found in table '{tableName}'.");
 
-            var sb = new StringBuilder();
+            var sb = new StringBuilder(1024);
             sb.AppendLine($"# Column: {col.Name}");
             sb.AppendLine($"- **Table**: {tableName}");
             sb.AppendLine($"- **Data Type**: {col.DataType}");
@@ -206,4 +207,7 @@ public sealed class ColumnTools
         return model.Tables.Find(tableName)
             ?? throw new InvalidOperationException($"Table '{tableName}' not found.");
     }
+
+    private static string EscapeMd(string s) =>
+        s.Replace("|", "\\|").Replace("\n", " ").Replace("\r", "");
 }
