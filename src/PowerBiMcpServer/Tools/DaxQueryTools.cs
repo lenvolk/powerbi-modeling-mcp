@@ -85,31 +85,34 @@ ORDER BY [Table], [Column]";
     [McpServerTool(Name = "dax_info_relationships",
         Title = "Get DMV - Relationships Info",
         ReadOnly = true, Idempotent = true)]
-    [Description("Returns DMV information about all active relationships and their referential integrity stats.")]
+    [Description("Returns DMV information about all relationships with resolved table/column names, activity status, and cross-filter direction.")]
     public string GetRelationshipsInfo(
         [Description("Connection ID")] string connectionId)
     {
         try
         {
-            const string dax = @"
-EVALUATE
-SELECTCOLUMNS(
-    INFO.RELATIONSHIPS(),
-    ""ID"", [ID],
-    ""FromTableID"", [FromTableID],
-    ""FromColumnID"", [FromColumnID],
-    ""ToTableID"", [ToTableID],
-    ""ToColumnID"", [ToColumnID],
-    ""IsActive"", [IsActive],
-    ""CrossFilter"", [CrossFilteringBehavior],
-    ""JoinOnDate"", [JoinOnDateBehavior],
-    ""RelyOnRefIntegrity"", [RelyOnReferentialIntegrity]
-)";
+            // Use TOM model directly to get resolved table/column names
+            // (INFO.RELATIONSHIPS() only returns numeric IDs which require complex JOINs)
+            var model = _cm.GetModel(connectionId);
+            var sb = new System.Text.StringBuilder(2048);
+            sb.AppendLine("| # | From Table | From Column | To Table | To Column | Active | Cross Filter | Cardinality |");
+            sb.AppendLine("| --- | --- | --- | --- | --- | --- | --- | --- |");
 
-            return _cm.ExecuteDaxQuery(connectionId, dax);
+            int i = 1;
+            foreach (var rel in model.Relationships.OfType<Microsoft.AnalysisServices.Tabular.SingleColumnRelationship>())
+            {
+                sb.AppendLine($"| {i++} | {EscapeMd(rel.FromTable.Name)} | {EscapeMd(rel.FromColumn.Name)} | "
+                    + $"{EscapeMd(rel.ToTable.Name)} | {EscapeMd(rel.ToColumn.Name)} | "
+                    + $"{rel.IsActive} | {rel.CrossFilteringBehavior} | {rel.FromCardinality}-to-{rel.ToCardinality} |");
+            }
+
+            return sb.ToString();
         }
         catch (Exception ex) { return $"Error: {ex.Message}"; }
     }
+
+    private static string EscapeMd(string s) =>
+        s.Replace("|", "\\|").Replace("\n", " ").Replace("\r", "");
 
     [McpServerTool(Name = "dax_info_measures",
         Title = "Get DMV - Measures Info",

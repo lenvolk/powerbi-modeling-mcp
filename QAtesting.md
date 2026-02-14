@@ -140,3 +140,38 @@ Build succeeded. 0 Warning(s), 0 Error(s)
 
 All 52 tests passed against live Power BI Desktop (Adventure Works DW 2020).
 
+---
+
+## Round 3 — New Tool Domain Tests (2026-02-14)
+
+| # | Test | Result | Notes |
+|---|------|--------|-------|
+| DMV01 | DMV rels with resolved names | ✅ | Shows Sales, Currency, Product table names |
+| HIER01 | List hierarchies | ✅ | Lists all hierarchies |
+| HIER02 | Create hierarchy (Customer geo) | ✅ | 3 levels: Country Region → State Province → City |
+| HIER03 | Get hierarchy details | ✅ | Shows levels with ordinals |
+| HIER04 | Delete hierarchy | ✅ | Cleaned up |
+| HIER05 | Empty hierarchy name validation | ✅ | Returns error |
+| PERSP01 | List perspectives | ✅ | Lists existing perspectives |
+| PERSP02 | Create perspective | ✅ | "QA Test Perspective" created |
+| PERSP03 | Add table to perspective | ✅ | Currency added |
+| PERSP04 | Get perspective details | ✅ | Shows Currency |
+| PERSP05 | Remove table from perspective | ✅ | Removed |
+| PERSP06 | Delete perspective | ✅ | Cleaned up |
+| ROLE01 | List roles | ✅ | Lists existing roles |
+| ROLE02 | Create role | ✅ | "QA Test Role" with Read permission |
+| ROLE03 | Set RLS table filter | ✅ | `[CurrencyKey] < 10` |
+| ROLE04 | Get role details | ✅ | Shows filter expression |
+| ROLE05 | Clear table filter | ✅ | Filter removed |
+| ROLE06 | Delete role | ✅ | Cleaned up |
+| CALC01 | List calc groups | ✅ | Lists existing groups |
+| CALC02 | Create calc group | ✅ | "QA Time Intel" with DiscourageImplicitMeasures |
+| CALC03 | Add calc item (YTD) | ✅ | YTD with DATESYTD expression |
+| CALC04 | Get calc group details | ✅ | Shows YTD item |
+| CALC05 | Delete calc item | ✅ | YTD removed |
+| CALC06 | Delete calc group | ✅ | Cleaned up |
+| PART01 | List partitions | ✅ | All tables shown |
+| PART02 | Get partition details | ✅ | Shows M source expression |
+
+**26 tests, all passing.**
+

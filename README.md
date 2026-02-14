@@ -43,7 +43,7 @@ Expected response:
 
 ### 4. Connect VS Code
 
-This repo includes a `.vscode/mcp.json` that points to the running server. Open the workspace in VS Code with [GitHub Copilot](https://marketplace.visualstudio.com/items?itemName=GitHub.copilot) installed, then restart the MCP server from the Command Palette (**MCP: List Servers** > **powerbi-mcp-server** > **Restart Server**). You should see "46 tools" discovered.
+This repo includes a `.vscode/mcp.json` that points to the running server. Open the workspace in VS Code with [GitHub Copilot](https://marketplace.visualstudio.com/items?itemName=GitHub.copilot) installed, then restart the MCP server from the Command Palette (**MCP: List Servers** > **powerbi-mcp-server** > **Restart Server**). You should see "69 tools" discovered.
 
 > **Important:** Unlike stdio mode, the HTTP server must be started manually *before* VS Code can connect. If you see a "fetch failed" error, make sure the server is running (step 2).
 
@@ -104,6 +104,11 @@ Each tool is a single action (one-tool-per-action design, simpler for LLMs than 
 | **relationship** | `list`, `create`, `delete`, `activate`, `find`                                |
 | **dax**          | `query`, `evaluate_measure`, `info_tables`, `info_relationships`, `info_measures`, `preview_table`, `distinct_values` |
 | **tmdl**         | `export`, `import`, `read_folder`, `read_file`, `list_files`, `pbip_discover` |
+| **hierarchy**    | `list`, `get`, `create`, `delete`                                                                    |
+| **perspective**  | `list`, `get`, `create`, `delete`, `add_table`, `remove_table`                                       |
+| **role**         | `list`, `get`, `create`, `delete`, `set_table_filter`, `clear_table_filter`                           |
+| **partition**    | `list`, `get`, `update_expression`                                                                    |
+| **calcgroup**    | `list`, `get`, `create`, `delete`, `add_item`, `delete_item`                                          |
 
 ### Usage Flow
 

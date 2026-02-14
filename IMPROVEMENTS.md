@@ -670,6 +670,38 @@ dotnet build src/PowerBiMcpServer/PowerBiMcpServer.csproj
 
 ---
 
+### Round 3 — New Tool Domains
+
+**Date:** 2026-02-14  
+**Type:** Feature Additions  
+**Models Used:** GPT-5.3-Codex, Claude Opus 4.6-fast, GPT-5.2-Codex, Claude Sonnet 4, GPT-5.1-Codex, GPT-5
+
+#### Summary
+Added 5 new tool domains (23 new tools) covering previously missing Power BI model management capabilities. All tools verified through live testing against Adventure Works DW 2020.
+
+- 🏗️ Hierarchy management (list/get/create/delete)
+- 🔭 Perspective CRUD (list/get/create/delete/add_table/remove_table)
+- 🔐 Row-Level Security roles (list/get/create/delete/set_filter/clear_filter)
+- 📦 Partition management (list/get/update_expression)
+- 🧮 Calculation Groups (list/get/create/delete/add_item/delete_item)
+- 🔗 DMV relationships now show resolved table/column names instead of numeric IDs
+
+#### New Files
+| File | Tools |
+|------|-------|
+| `Tools/HierarchyTools.cs` | hierarchy_list, hierarchy_get, hierarchy_create, hierarchy_delete |
+| `Tools/PerspectiveTools.cs` | perspective_list, perspective_get, perspective_create, perspective_delete, perspective_add_table, perspective_remove_table |
+| `Tools/RoleTools.cs` | role_list, role_get, role_create, role_delete, role_set_table_filter, role_clear_table_filter |
+| `Tools/PartitionTools.cs` | partition_list, partition_get, partition_update_expression |
+| `Tools/CalculationGroupTools.cs` | calcgroup_list, calcgroup_get, calcgroup_create, calcgroup_add_item, calcgroup_delete_item, calcgroup_delete |
+
+#### Modified Files
+| File | Change |
+|------|--------|
+| `Tools/DaxQueryTools.cs` | DMV relationships now uses TOM model for resolved table/column names |
+
+---
+
 ## Credits
 
 These improvements were identified through automated code review (GPT-5.3-Codex + Claude Opus 4.6-fast parallel review) and manual security analysis, following OWASP Top 10 and .NET security best practices.

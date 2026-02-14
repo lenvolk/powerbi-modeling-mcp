@@ -58,7 +58,7 @@ You should see:
 2. The `.vscode/mcp.json` is already configured for HTTP mode
 3. Open Command Palette (`Ctrl+Shift+P`) → **MCP: List Servers**
 4. Select **powerbi-mcp-server** → **Start Server** (or **Restart Server**)
-5. You should see **46 tools** discovered
+5. You should see **69 tools** discovered
 
 ---
 
