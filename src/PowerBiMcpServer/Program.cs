@@ -11,10 +11,25 @@ using PowerBiMcpServer.Models;
 using PowerBiMcpServer.Services;
 using PowerBiMcpServer.Tools;
 
+// ── Version ─────────────────────────────────────────────────────────────────
+var serverVersion = typeof(Program).Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
+
 // ── CLI argument parsing ────────────────────────────────────────────────────
-var transport  = GetArg(args, "--transport", "stdio");           // stdio | http
-var host       = GetArg(args, "--host", "127.0.0.1");           // bind address
-var portStr    = GetArg(args, "--port", "5100");
+string transport, host, portStr, compatibility;
+try
+{
+    transport     = GetArg(args, "--transport", "stdio");           // stdio | http
+    host          = GetArg(args, "--host", "127.0.0.1");           // bind address
+    portStr       = GetArg(args, "--port", "5100");
+    compatibility = GetArg(args, "--compatibility", "PowerBI"); // PowerBI | Full
+}
+catch (ArgumentException ex)
+{
+    Console.Error.WriteLine($"Error: {ex.Message}");
+    Environment.Exit(1);
+    return; // unreachable but satisfies compiler
+}
+
 if (!int.TryParse(portStr, out var port) || port < 1 || port > 65535)
 {
     Console.Error.WriteLine($"Error: Invalid port number '{portStr}'. Must be between 1 and 65535.");
@@ -22,7 +37,6 @@ if (!int.TryParse(portStr, out var port) || port < 1 || port > 65535)
 }
 var mode       = args.Contains("--readonly") ? "readonly" : "readwrite";
 var skipConfirm = args.Contains("--skipconfirmation");
-var compatibility = GetArg(args, "--compatibility", "PowerBI"); // PowerBI | Full
 
 // ── Shared service registration ─────────────────────────────────────────────
 if (transport.Equals("http", StringComparison.OrdinalIgnoreCase))
@@ -40,7 +54,7 @@ if (transport.Equals("http", StringComparison.OrdinalIgnoreCase))
         options.ServerInfo = new()
         {
             Name  = "powerbi-mcp-server",
-            Version = "1.0.0"
+            Version = serverVersion
         };
     })
     .WithHttpTransport(httpOptions =>
@@ -64,7 +78,7 @@ if (transport.Equals("http", StringComparison.OrdinalIgnoreCase))
     {
         status      = "healthy",
         transport   = "http",
-        version     = "1.0.0",
+        version     = serverVersion,
         connections = cm.ActiveConnectionCount
     }));
 
@@ -94,7 +108,7 @@ else
             options.ServerInfo = new()
             {
                 Name  = "powerbi-mcp-server",
-                Version = "1.0.0"
+                Version = serverVersion
             };
         })
         .WithStdioServerTransport()

@@ -31,44 +31,48 @@ public sealed class ConnectionTools
 
     [McpServerTool(Name = "connection_connect_desktop",
         Title = "Connect to Power BI Desktop",
-        ReadOnly = true, Idempotent = true)]
+        ReadOnly = true, Idempotent = false)]
     [Description("Discovers running Power BI Desktop instances and connects to the one matching the given file name. "
         + "Returns a connection ID to use with other tools. If no file name is provided, lists all running instances.")]
     public string ConnectDesktop(
         [Description("Name (or partial name) of the .pbix file open in Power BI Desktop. Leave empty to list running instances.")]
         string? fileName = null)
     {
-        var instances = _discovery.Discover();
-
-        if (instances.Count == 0)
-            return "No running Power BI Desktop instances found. Please open a .pbix file in Power BI Desktop first.";
-
-        if (string.IsNullOrWhiteSpace(fileName))
+        try
         {
-            var sb = new StringBuilder(512);
-            sb.AppendLine("## Running Power BI Desktop instances\n");
-            foreach (var inst in instances)
-                sb.AppendLine($"- **{inst.FileName}** — port {inst.Port}");
-            sb.AppendLine("\nProvide the file name to connect.");
-            return sb.ToString();
+            var instances = _discovery.Discover();
+
+            if (instances.Count == 0)
+                return "No running Power BI Desktop instances found. Please open a .pbix file in Power BI Desktop first.";
+
+            if (string.IsNullOrWhiteSpace(fileName))
+            {
+                var sb = new StringBuilder(512);
+                sb.AppendLine("## Running Power BI Desktop instances\n");
+                foreach (var inst in instances)
+                    sb.AppendLine($"- **{inst.FileName}** — port {inst.Port}");
+                sb.AppendLine("\nProvide the file name to connect.");
+                return sb.ToString();
+            }
+
+            // Search the already-discovered list instead of calling Discover() again
+            var match = instances.FirstOrDefault(i =>
+                i.FileName.Contains(fileName, StringComparison.OrdinalIgnoreCase));
+            if (match is null)
+                return $"No Power BI Desktop instance found matching '{fileName}'. Running instances:\n"
+                     + string.Join("\n", instances.Select(i => $"  - {i.FileName}"));
+
+            var id = _cm.Connect(match.ConnectionString, match.FileName, ConnectionKind.PowerBIDesktop);
+            return $"Connected to **{match.FileName}** (connection `{id}`). You can now use this connection ID with other tools.";
         }
-
-        // Search the already-discovered list instead of calling Discover() again
-        var match = instances.FirstOrDefault(i =>
-            i.FileName.Contains(fileName, StringComparison.OrdinalIgnoreCase));
-        if (match is null)
-            return $"No Power BI Desktop instance found matching '{fileName}'. Running instances:\n"
-                 + string.Join("\n", instances.Select(i => $"  - {i.FileName}"));
-
-        var id = _cm.Connect(match.ConnectionString, match.FileName, ConnectionKind.PowerBIDesktop);
-        return $"Connected to **{match.FileName}** (connection `{id}`). You can now use this connection ID with other tools.";
+        catch (Exception ex) { return $"Error connecting to Power BI Desktop: {ex.Message}"; }
     }
 
     // ── Fabric Workspace ────────────────────────────────────────────────────
 
     [McpServerTool(Name = "connection_connect_fabric",
         Title = "Connect to Fabric Workspace",
-        ReadOnly = true, Idempotent = true)]
+        ReadOnly = true, Idempotent = false)]
     [Description("Connects to a semantic model in a Microsoft Fabric workspace via the XMLA endpoint. "
         + "Authenticates using Azure Identity (DefaultAzureCredential) or the PBI_MODELING_MCP_ACCESS_TOKEN environment variable.")]
     public string ConnectFabric(
@@ -78,13 +82,16 @@ public sealed class ConnectionTools
         // Build XMLA endpoint
         var xmlaEndpoint = $"powerbi://api.powerbi.com/v1.0/myorg/{Uri.EscapeDataString(workspaceName)}";
 
+        // Escape semicolons in names to prevent connection string injection
+        var safeCatalog = semanticModelName.Replace(";", "");
+
         // Determine access token
         var envToken = Environment.GetEnvironmentVariable("PBI_MODELING_MCP_ACCESS_TOKEN");
         string connectionString;
 
         if (!string.IsNullOrEmpty(envToken))
         {
-            connectionString = $"Data Source={xmlaEndpoint};Initial Catalog={semanticModelName};"
+            connectionString = $"Data Source={xmlaEndpoint};Initial Catalog={safeCatalog};"
                              + $"Password={envToken};";
         }
         else
@@ -95,7 +102,7 @@ public sealed class ConnectionTools
                 var credential = new DefaultAzureCredential();
                 var token = credential.GetToken(
                     new Azure.Core.TokenRequestContext(new[] { "https://analysis.windows.net/powerbi/api/.default" }));
-                connectionString = $"Data Source={xmlaEndpoint};Initial Catalog={semanticModelName};"
+                connectionString = $"Data Source={xmlaEndpoint};Initial Catalog={safeCatalog};"
                                  + $"Password={token.Token};";
             }
             catch (Exception ex)
@@ -114,7 +121,7 @@ public sealed class ConnectionTools
 
     [McpServerTool(Name = "connection_open_pbip",
         Title = "Open Semantic Model from PBIP",
-        ReadOnly = true, Idempotent = true)]
+        ReadOnly = true, Idempotent = false)]
     [Description("Opens a semantic model from a Power BI Project (PBIP) TMDL folder. "
         + "This is an offline connection that works with TMDL files on disk.")]
     public string OpenPbip(
@@ -170,7 +177,9 @@ public sealed class ConnectionTools
     public string Disconnect(
         [Description("Connection ID returned by a connect operation")] string connectionId)
     {
-        _cm.Disconnect(connectionId);
-        return $"Disconnected `{connectionId}`.";
+        _cm.Disconnect(connectionId, out var found);
+        return found
+            ? $"Disconnected `{connectionId}`."
+            : $"Connection `{connectionId}` not found — it may have already been disconnected.";
     }
 }

@@ -111,6 +111,11 @@ public sealed class TableTools
     {
         try
         {
+            if (string.IsNullOrWhiteSpace(tableName))
+                return "Error: Table name cannot be empty.";
+            if (tableName.Length > 256)
+                return "Error: Table name exceeds 256 character limit.";
+
             var model = _cm.GetModel(connectionId);
 
             if (model.Tables.Find(tableName) is not null)
@@ -133,7 +138,7 @@ public sealed class TableTools
 
     [McpServerTool(Name = "table_delete",
         Title = "Delete Table",
-        ReadOnly = false)]
+        ReadOnly = false, Destructive = true)]
     [Description("Deletes a table from the semantic model. WARNING: This also removes all columns, measures, and relationships associated with this table.")]
     public string DeleteTable(
         [Description("Connection ID")] string connectionId,
@@ -164,6 +169,11 @@ public sealed class TableTools
     {
         try
         {
+            if (string.IsNullOrWhiteSpace(newName))
+                return "Error: New table name cannot be empty.";
+            if (newName.Length > 256)
+                return "Error: New table name exceeds 256 character limit.";
+
             var model = _cm.GetModel(connectionId);
             var table = model.Tables.Find(tableName)
                 ?? throw new InvalidOperationException($"Table '{tableName}' not found.");

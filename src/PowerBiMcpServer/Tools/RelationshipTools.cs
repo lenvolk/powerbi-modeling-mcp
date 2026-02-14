@@ -72,6 +72,9 @@ public sealed class RelationshipTools
             var tc = tt.Columns.Find(toColumn)
                 ?? throw new InvalidOperationException($"Column '{toColumn}' not found in '{toTable}'.");
 
+            if (!Enum.TryParse<CrossFilteringBehavior>(crossFilter, ignoreCase: true, out var parsedCrossFilter))
+                return $"Error: Invalid cross-filter value '{crossFilter}'. Valid values: {string.Join(", ", Enum.GetNames<CrossFilteringBehavior>())}";
+
             var rel = new SingleColumnRelationship
             {
                 Name       = $"{fromTable}_{fromColumn}_{toTable}_{toColumn}",
@@ -79,7 +82,7 @@ public sealed class RelationshipTools
                 ToColumn   = tc,
                 FromCardinality = RelationshipEndCardinality.Many,
                 ToCardinality   = RelationshipEndCardinality.One,
-                CrossFilteringBehavior = Enum.Parse<CrossFilteringBehavior>(crossFilter, ignoreCase: true),
+                CrossFilteringBehavior = parsedCrossFilter,
                 IsActive   = isActive
             };
 
@@ -93,7 +96,7 @@ public sealed class RelationshipTools
 
     [McpServerTool(Name = "relationship_delete",
         Title = "Delete Relationship",
-        ReadOnly = false)]
+        ReadOnly = false, Destructive = true)]
     [Description("Deletes a relationship between two tables.")]
     public string DeleteRelationship(
         [Description("Connection ID")] string connectionId,

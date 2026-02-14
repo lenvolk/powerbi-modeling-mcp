@@ -123,7 +123,7 @@ UNION(
             }
 
             _cm.SaveChanges(connectionId);
-            return "Refresh completed successfully.";
+            return "Refresh requested successfully. Note: the refresh may still be processing on the server.";
         }
         catch (Exception ex) { return $"Error: {ex.Message}"; }
     }

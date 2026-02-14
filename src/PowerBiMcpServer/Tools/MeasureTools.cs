@@ -93,6 +93,12 @@ public sealed class MeasureTools
     {
         try
         {
+            if (string.IsNullOrWhiteSpace(measureName))
+                return "Error: Measure name cannot be empty.";
+            if (measureName.Length > 256)
+                return "Error: Measure name exceeds 256 character limit.";
+            if (string.IsNullOrWhiteSpace(expression))
+                return "Error: DAX expression cannot be empty.";
             var model = _cm.GetModel(connectionId);
             var table = model.Tables.Find(tableName)
                 ?? throw new InvalidOperationException($"Table '{tableName}' not found.");
@@ -150,7 +156,7 @@ public sealed class MeasureTools
 
     [McpServerTool(Name = "measure_delete",
         Title = "Delete Measure",
-        ReadOnly = false)]
+        ReadOnly = false, Destructive = true)]
     [Description("Deletes a measure from the semantic model.")]
     public string DeleteMeasure(
         [Description("Connection ID")] string connectionId,
@@ -185,6 +191,11 @@ public sealed class MeasureTools
     {
         try
         {
+            if (string.IsNullOrWhiteSpace(newName))
+                return "Error: New measure name cannot be empty.";
+            if (newName.Length > 256)
+                return "Error: New measure name exceeds 256 character limit.";
+
             var measure = FindMeasure(connectionId, tableName, measureName);
             measure.Name = newName;
             _cm.SaveChanges(connectionId);

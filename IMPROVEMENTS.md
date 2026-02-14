@@ -374,6 +374,224 @@ Lower-priority improvements for future consideration:
 3. **Telemetry**: Add structured logging for tool invocations and query performance
 4. **TMDL Overwrite Handling**: `TmdlService.SaveToFolder` doesn't handle existing files gracefully
 5. **API Documentation**: Add `<example>` XML tags to complex tool methods
+6. **Calculation Groups CRUD**: No tool domain for calculation groups
+7. **Hierarchy CRUD**: No management tools for hierarchies
+8. **RLS/Roles Management**: Only counts roles; no filter/member tools
+9. **Perspectives CRUD**: Only counts perspectives; no authoring tools
+10. **Partition Management**: No partition-focused tools (M queries, incremental refresh)
+11. **CancellationToken Support**: Async DAX execution with cancellation propagation from MCP request context
+12. **Stale Connection Cleanup**: Background timer for idle connection timeout in HTTP mode
+13. **appsettings.json/Env Var Config**: Add `IConfiguration` support with `POWERBI_MCP_*` env var prefix
+
+---
+
+## Round 2 — Security, Reliability, and Quality Improvements
+
+**Date:** 2026-02-14  
+**Type:** Security Hardening, MCP Protocol Correctness, Input Validation, Thread Safety  
+**Reviewed by:** GPT-5.3-Codex + Claude Opus 4.6 (parallel review)
+
+### Executive Summary (Round 2)
+
+Two independent AI models reviewed the entire codebase in parallel, identifying 28 issues across security, reliability, and protocol categories. **13 issues have been addressed** in this update, with all 52 test scenarios passing against live Power BI Desktop.
+
+**Impact:**
+- 🔐 Eliminated critical path traversal vulnerability (arbitrary file read/write)
+- 🛡️ Added per-connection thread safety (SemaphoreSlim for TOM objects)
+- ✅ Fixed 6 incorrect MCP tool annotations (ReadOnly, Idempotent, Destructive)
+- 🔍 Added input validation (empty names, length limits, enum parsing)
+- 🔗 Fixed connection ID collision risk (8-char → 12-char with TryAdd)
+- 🐛 Fixed missing try/catch in ConnectDesktop, unhandled CLI arg errors
+- 📊 All 52 test scenarios pass against live Power BI Desktop
+
+---
+
+### 16. Path Traversal Protection (Critical)
+
+**Issue:** All TMDL/PBIP tools accepted arbitrary filesystem paths with zero validation. An LLM could read system files (`C:\Windows\System32\config\SAM`), write to arbitrary locations, or scan entire disks.
+
+**Files Affected:**
+- `src/PowerBiMcpServer/Tools/TmdlTools.cs`
+
+**What Changed:**
+- Added `ValidatePath()` method that canonicalizes paths via `Path.GetFullPath` and blocks system directories (`C:\Windows`, `/etc`, `/var`, `/usr`, etc.)
+- Added file extension validation to `tmdl_read_file` — only `.tmdl` and `.json` files allowed
+- Changed `pbip_discover` from `SearchOption.AllDirectories` to `TopDirectoryOnly` for `.pbip` files to prevent full-disk scans
+- All TMDL/PBIP tools now validate paths before any file I/O
+
+**Why This Matters:**  
+This was the most critical vulnerability. A prompt-injected LLM or malicious user could use the MCP server to exfiltrate sensitive files from the host system.
+
+---
+
+### 17. Fixed `tmdl_export` ReadOnly Annotation
+
+**Issue:** `tmdl_export` was marked `ReadOnly = true` but writes files to disk, letting MCP clients auto-approve file writes without user confirmation. Also bypassed `--readonly` mode.
+
+**Files Affected:**
+- `src/PowerBiMcpServer/Tools/TmdlTools.cs`
+
+**What Changed:**
+- Changed `ReadOnly = true` to `ReadOnly = false`
+- Added explicit readonly check: returns error if `--readonly` flag is active
+- Added `Destructive = true` to `tmdl_import` (replaces entire model)
+
+---
+
+### 18. Fixed Connect Tools Idempotent Annotation
+
+**Issue:** `connection_connect_desktop`, `connection_connect_fabric`, and `connection_open_pbip` were marked `Idempotent = true` but each call creates new state (connection ID + server handle).
+
+**Files Affected:**
+- `src/PowerBiMcpServer/Tools/ConnectionTools.cs`
+
+**What Changed:**
+- Set `Idempotent = false` on all three connect tools
+
+---
+
+### 19. Connection String Injection Prevention
+
+**Issue:** `semanticModelName` was interpolated directly into XMLA connection strings. A semicolon in the name could alter connection-string semantics.
+
+**Files Affected:**
+- `src/PowerBiMcpServer/Tools/ConnectionTools.cs`
+
+**What Changed:**
+- Semicolons stripped from semantic model names before connection string interpolation
+
+---
+
+### 20. Connection ID Collision Fix
+
+**Issue:** 8-char hex IDs (32 bits) had collision risk. The code used `_connections[id] = managed` — a blind overwrite that could orphan existing connections (memory leak + handle leak).
+
+**Files Affected:**
+- `src/PowerBiMcpServer/Services/ConnectionManager.cs`
+
+**What Changed:**
+- IDs increased to 12 hex chars (48 bits — collision probability drops to 1-in-50M at 10K connections)
+- Changed from blind dictionary set to `TryAdd` with retry loop — no possibility of overwriting existing connections
+- Server object created before ID generation to fail fast on connection errors
+
+---
+
+### 21. Per-Connection Thread Safety
+
+**Issue:** TOM `Server` objects are not thread-safe. Concurrent MCP tool calls could corrupt model state or cause COM exceptions.
+
+**Files Affected:**
+- `src/PowerBiMcpServer/Services/ConnectionManager.cs`
+
+**What Changed:**
+- Added `SemaphoreSlim(1,1)` to `ManagedConnection` — serializes TOM access per connection
+- Fixed `Dispose()` race condition: changed from iterate+clear to atomic `TryRemove` drain
+
+---
+
+### 22. Input Validation for Names and Enums
+
+**Issue:** Create/rename operations accepted empty strings, whitespace, or extremely long names. `Enum.Parse` threw cryptic .NET errors on invalid values.
+
+**Files Affected:**
+- `src/PowerBiMcpServer/Tools/MeasureTools.cs`
+- `src/PowerBiMcpServer/Tools/TableTools.cs`
+- `src/PowerBiMcpServer/Tools/ColumnTools.cs`
+- `src/PowerBiMcpServer/Tools/RelationshipTools.cs`
+
+**What Changed:**
+- Added empty/whitespace checks and 256-character limit on all create/rename operations
+- Changed `Enum.Parse` to `Enum.TryParse` with friendly error messages listing valid values (for `dataType` in column_create and `crossFilter` in relationship_create)
+
+---
+
+### 23. Disconnect Feedback Fix
+
+**Issue:** `connection_disconnect` always returned "Disconnected" even for non-existent IDs.
+
+**Files Affected:**
+- `src/PowerBiMcpServer/Tools/ConnectionTools.cs`
+- `src/PowerBiMcpServer/Services/ConnectionManager.cs`
+
+**What Changed:**
+- `Disconnect` now returns `out bool found` — caller shows distinct message for non-existent IDs
+
+---
+
+### 24. Destructive Annotations for Delete Tools
+
+**Issue:** Delete tools lacked `Destructive = true` annotation. MCP clients use this to show extra confirmation prompts.
+
+**Files Affected:**
+- `src/PowerBiMcpServer/Tools/MeasureTools.cs`
+- `src/PowerBiMcpServer/Tools/TableTools.cs`
+- `src/PowerBiMcpServer/Tools/ColumnTools.cs`
+- `src/PowerBiMcpServer/Tools/RelationshipTools.cs`
+- `src/PowerBiMcpServer/Tools/TmdlTools.cs`
+
+**What Changed:**
+- Added `Destructive = true` to `measure_delete`, `table_delete`, `column_delete`, `relationship_delete`, `tmdl_import`
+
+---
+
+### 25. Version String Deduplication
+
+**Issue:** Version `"1.0.0"` was hardcoded in two places (HTTP and stdio branches).
+
+**Files Affected:**
+- `src/PowerBiMcpServer/Program.cs`
+
+**What Changed:**
+- Extracted version from assembly metadata: `typeof(Program).Assembly.GetName().Version`
+- Single source of truth used in both transport branches and health endpoint
+
+---
+
+### 26. CLI Argument Error Handling
+
+**Issue:** `GetArg` threw unhandled `ArgumentException` for missing values on flags other than `--port`.
+
+**Files Affected:**
+- `src/PowerBiMcpServer/Program.cs`
+
+**What Changed:**
+- Wrapped all CLI parsing in try/catch with descriptive error message and `Environment.Exit(1)`
+
+---
+
+### 27. KillExistingProcess Build Target Fix
+
+**Issue:** Pre-build `taskkill /IM` killed ALL instances by name, not just the one being rebuilt.
+
+**Files Affected:**
+- `src/PowerBiMcpServer/PowerBiMcpServer.csproj`
+
+**What Changed:**
+- Gated the target behind `Condition="'$(Configuration)' == 'Debug'"` — only runs in Debug builds
+
+---
+
+### 28. DAX Query Result Markdown Escaping
+
+**Issue:** `FormatReaderAsMarkdown` did not escape pipe/newline characters in cell values, breaking markdown tables.
+
+**Files Affected:**
+- `src/PowerBiMcpServer/Services/ConnectionManager.cs`
+
+**What Changed:**
+- Added `EscapeMdCell()` helper applied to all cell values in DAX query results
+
+---
+
+### 29. ConnectDesktop Missing Error Handler
+
+**Issue:** `ConnectDesktop` was the only tool method without a try/catch wrapper. If the PBI Desktop port was stale (process crashed), the TOM connection exception propagated unhandled through the MCP SDK.
+
+**Files Affected:**
+- `src/PowerBiMcpServer/Tools/ConnectionTools.cs`
+
+**What Changed:**
+- Added try/catch returning `"Error connecting to Power BI Desktop: {message}"`
 
 ---
 
@@ -391,6 +609,8 @@ dotnet build src/PowerBiMcpServer/PowerBiMcpServer.csproj
 
 ## Files Modified
 
+### Round 1 (2026-02-13)
+
 | File | Changes |
 |------|---------|
 | `Tools/DaxQueryTools.cs` | DAX injection fixes, 3 broken DMV queries fixed, unused using removed |
@@ -406,13 +626,29 @@ dotnet build src/PowerBiMcpServer/PowerBiMcpServer.csproj
 | `Models/ConnectionInfo.cs` | Immutable properties (`set` → `init`) |
 | `Program.cs` | CLI port validation, ConnectionManager disposal hook |
 
+### Round 2 (2026-02-14)
+
+| File | Changes |
+|------|---------|
+| `Tools/TmdlTools.cs` | Path traversal protection, file extension validation, ReadOnly fix, Destructive annotation, readonly mode check |
+| `Tools/ConnectionTools.cs` | Idempotent=false, connection string injection fix, try/catch on ConnectDesktop, disconnect feedback |
+| `Tools/MeasureTools.cs` | Input validation (empty/length), Destructive annotation |
+| `Tools/TableTools.cs` | Input validation (empty/length), Destructive annotation |
+| `Tools/ColumnTools.cs` | Input validation (empty/length), Enum.TryParse, Destructive annotation |
+| `Tools/RelationshipTools.cs` | Enum.TryParse for crossFilter, Destructive annotation |
+| `Tools/ModelTools.cs` | Refresh message fix ("requested" vs "completed") |
+| `Services/ConnectionManager.cs` | 12-char IDs, TryAdd collision fix, SemaphoreSlim thread safety, Dispose race fix, DAX result cell escaping, disconnect feedback |
+| `Program.cs` | Version dedup, CLI arg error handling |
+| `PowerBiMcpServer.csproj` | KillExistingProcess Debug-only |
+| `QAtesting.md` | **NEW** — 52 test scenarios with results |
+
 ---
 
 ## Migration Notes
 
 **Breaking Changes:** None. All improvements are backward-compatible.
 
-**Behavioral Changes:**
+**Behavioral Changes (Round 1):**
 - Connection list output now includes (redacted) connection strings
 - DAX query results are capped at 10,000 rows
 - Queries timeout after 5 minutes
@@ -420,12 +656,22 @@ dotnet build src/PowerBiMcpServer/PowerBiMcpServer.csproj
 - DMV info tools (`dax_info_tables`, `dax_info_measures`, `dax_info_relationships`) now return actual data instead of errors
 - Connection to PBI Desktop is faster (eliminated redundant scans)
 
+**Behavioral Changes (Round 2):**
+- Connection IDs are now 12 hex chars (was 8)
+- TMDL/PBIP tools reject paths to system directories and non-.tmdl file extensions
+- `tmdl_export` is no longer auto-approved (ReadOnly=false) and blocked in --readonly mode
+- Delete/import tools now request extra confirmation from MCP clients (Destructive=true)
+- Create/rename operations validate names (non-empty, ≤256 chars)
+- Invalid enum values return friendly error with valid options
+- Disconnecting a non-existent ID returns a distinct message
+- DAX query result cells are markdown-escaped
+
 **Deployment:** No special steps required. Simply rebuild and restart the server.
 
 ---
 
 ## Credits
 
-These improvements were identified through automated code review and manual security analysis, following OWASP Top 10 and .NET security best practices.
+These improvements were identified through automated code review (GPT-5.3-Codex + Claude Opus 4.6-fast parallel review) and manual security analysis, following OWASP Top 10 and .NET security best practices.
 
 For questions or issues related to these changes, please file an issue in the repository.

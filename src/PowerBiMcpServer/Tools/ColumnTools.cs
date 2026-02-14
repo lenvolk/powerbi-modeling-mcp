@@ -95,6 +95,14 @@ public sealed class ColumnTools
     {
         try
         {
+            if (string.IsNullOrWhiteSpace(columnName))
+                return "Error: Column name cannot be empty.";
+            if (columnName.Length > 256)
+                return "Error: Column name exceeds 256 character limit.";
+
+            if (!Enum.TryParse<DataType>(dataType, ignoreCase: true, out var parsedDataType))
+                return $"Error: Invalid data type '{dataType}'. Valid values: {string.Join(", ", Enum.GetNames<DataType>())}";
+
             var table = GetTable(connectionId, tableName);
 
             if (table.Columns.Find(columnName) is not null)
@@ -104,7 +112,7 @@ public sealed class ColumnTools
             {
                 Name         = columnName,
                 Expression   = expression,
-                DataType     = Enum.Parse<DataType>(dataType, ignoreCase: true),
+                DataType     = parsedDataType,
                 Description  = description ?? "",
                 FormatString = formatString
             };
@@ -156,7 +164,7 @@ public sealed class ColumnTools
 
     [McpServerTool(Name = "column_delete",
         Title = "Delete Column",
-        ReadOnly = false)]
+        ReadOnly = false, Destructive = true)]
     [Description("Deletes a column from a table. Cannot delete columns that are used by measures or relationships.")]
     public string DeleteColumn(
         [Description("Connection ID")] string connectionId,
@@ -189,6 +197,11 @@ public sealed class ColumnTools
     {
         try
         {
+            if (string.IsNullOrWhiteSpace(newName))
+                return "Error: New column name cannot be empty.";
+            if (newName.Length > 256)
+                return "Error: New column name exceeds 256 character limit.";
+
             var table = GetTable(connectionId, tableName);
             var col = table.Columns.Find(columnName)
                 ?? throw new InvalidOperationException($"Column '{columnName}' not found.");

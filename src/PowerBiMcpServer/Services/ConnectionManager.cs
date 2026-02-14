@@ -25,23 +25,28 @@ public sealed class ConnectionManager : IDisposable
     public string Connect(string connectionString, string name, ConnectionKind kind,
         string? databaseName = null, string? workspaceName = null)
     {
-        var id = Guid.NewGuid().ToString("N")[..8];
-
-        var info = new ConnInfo
-        {
-            Id               = id,
-            Name             = name,
-            ConnectionString = connectionString,
-            Kind             = kind,
-            DatabaseName     = databaseName,
-            WorkspaceName    = workspaceName
-        };
-
         var server = new Server();
         server.Connect(connectionString);
 
-        var managed = new ManagedConnection(info, server);
-        _connections[id] = managed;
+        // Generate a collision-resistant 12-char hex ID with TryAdd retry
+        string id;
+        ManagedConnection managed;
+        do
+        {
+            id = Guid.NewGuid().ToString("N")[..12];
+            var info = new ConnInfo
+            {
+                Id               = id,
+                Name             = name,
+                ConnectionString = connectionString,
+                Kind             = kind,
+                DatabaseName     = databaseName,
+                WorkspaceName    = workspaceName
+            };
+            managed = new ManagedConnection(info, server);
+        }
+        while (!_connections.TryAdd(id, managed));
+
         return id;
     }
 
@@ -109,17 +114,18 @@ public sealed class ConnectionManager : IDisposable
 
     // ── Disconnect / Dispose ────────────────────────────────────────────────
 
-    public void Disconnect(string connectionId)
+    public void Disconnect(string connectionId, out bool found)
     {
-        if (_connections.TryRemove(connectionId, out var c))
-            c.Dispose();
+        found = _connections.TryRemove(connectionId, out var c);
+        if (found) c!.Dispose();
     }
 
     public void Dispose()
     {
-        foreach (var c in _connections.Values)
-            c.Dispose();
-        _connections.Clear();
+        // Drain atomically to avoid race with concurrent Connect()
+        foreach (var key in _connections.Keys.ToList())
+            if (_connections.TryRemove(key, out var c))
+                c.Dispose();
     }
 
     // ── Private helpers ─────────────────────────────────────────────────────
@@ -140,7 +146,7 @@ public sealed class ConnectionManager : IDisposable
         while (reader.Read() && rowCount < MAX_ROWS)
         {
             var vals = Enumerable.Range(0, reader.FieldCount)
-                .Select(i => reader.IsDBNull(i) ? "" : reader.GetValue(i)?.ToString() ?? "");
+                .Select(i => reader.IsDBNull(i) ? "" : EscapeMdCell(reader.GetValue(i)?.ToString() ?? ""));
             lines.Add("| " + string.Join(" | ", vals) + " |");
             rowCount++;
         }
@@ -150,6 +156,9 @@ public sealed class ConnectionManager : IDisposable
 
         return string.Join("\n", lines);
     }
+
+    private static string EscapeMdCell(string s) =>
+        s.Replace("|", "\\|").Replace("\n", " ").Replace("\r", "");
 }
 
 /// <summary>Holds a TOM Server along with the connection metadata.</summary>
@@ -158,11 +167,18 @@ public sealed class ManagedConnection : IDisposable
     public ConnInfo Info   { get; }
     public Server   Server { get; }
 
+    /// <summary>Serializes TOM access — TOM Server objects are not thread-safe.</summary>
+    public SemaphoreSlim Lock { get; } = new(1, 1);
+
     public ManagedConnection(ConnInfo info, Server server)
     {
         Info   = info;
         Server = server;
     }
 
-    public void Dispose() => Server.Disconnect();
+    public void Dispose()
+    {
+        Lock.Dispose();
+        Server.Disconnect();
+    }
 }
