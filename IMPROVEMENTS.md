@@ -174,7 +174,7 @@ The 10,000 row limit is sufficient for data preview/exploration while protecting
 - Applied to all table/column names in markdown tables
 
 **Why This Matters:**  
-Power BI models can have names with special characters (e.g., `"Sales | Returns"` or multi-line descriptions). Unescaped output would break the markdown rendering in Claude, VS Code, and other MCP clients.
+Power BI models can have names with special characters (e.g., `"Sales | Returns"` or multi-line descriptions). Unescaped output would break the markdown rendering in VS Code, LLM chat clients, and other MCP hosts.
 
 ---
 
@@ -389,7 +389,7 @@ Lower-priority improvements for future consideration:
 
 **Date:** 2026-02-14  
 **Type:** Security Hardening, MCP Protocol Correctness, Input Validation, Thread Safety  
-**Reviewed by:** GPT-5.3-Codex + Claude Opus 4.6 (parallel review)
+**Reviewed by:** Dual-model parallel code review
 
 ### Executive Summary (Round 2)
 
@@ -674,7 +674,7 @@ dotnet build src/PowerBiMcpServer/PowerBiMcpServer.csproj
 
 **Date:** 2026-02-14  
 **Type:** Feature Additions  
-**Models Used:** GPT-5.3-Codex, Claude Opus 4.6-fast, GPT-5.2-Codex, Claude Sonnet 4, GPT-5.1-Codex, GPT-5
+**Approach:** Multi-model parallel implementation
 
 #### Summary
 Added 5 new tool domains (23 new tools) covering previously missing Power BI model management capabilities. All tools verified through live testing against Adventure Works DW 2020.
@@ -704,6 +704,6 @@ Added 5 new tool domains (23 new tools) covering previously missing Power BI mod
 
 ## Credits
 
-These improvements were identified through automated code review (GPT-5.3-Codex + Claude Opus 4.6-fast parallel review) and manual security analysis, following OWASP Top 10 and .NET security best practices.
+These improvements were identified through automated parallel code review and manual security analysis, following OWASP Top 10 and .NET security best practices.
 
 For questions or issues related to these changes, please file an issue in the repository.

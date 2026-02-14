@@ -10,7 +10,7 @@ assignees: ''
 Specify the version of the MCP server.
 
 ### Model used
-LLM model used: Claude Sonnet 4.5, GPT-5,...
+LLM model used: (e.g., your AI assistant name and version)
 
 ### Description
 A clear and concise description of the bug.
