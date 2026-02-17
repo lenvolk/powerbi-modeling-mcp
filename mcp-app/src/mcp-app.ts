@@ -462,27 +462,35 @@ let expandedDomain: string | null = null;
 let searchQuery = "";
 
 // ── App lifecycle ────────────────────────────────────────────────────────────
-const app = new App({ name: "powerbi-mcp-visualizer", version: "1.0.0" });
+// Try MCP host connection with timeout — fall back to standalone rendering
+let mcpConnected = false;
+try {
+  const app = new App({ name: "powerbi-mcp-visualizer", version: "1.0.0" });
 
-app.ontoolinput = () => {};
+  app.ontoolinput = () => {};
+  app.ontoolresult = () => { render(); };
 
-app.ontoolresult = () => {
-  render();
-};
+  app.onhostcontextchanged = (ctx) => {
+    if (ctx.theme) applyDocumentTheme(ctx.theme);
+    if (ctx.styles?.variables) applyHostStyleVariables(ctx.styles.variables);
+    if (ctx.styles?.css?.fonts) applyHostFonts(ctx.styles.css.fonts);
+    if (ctx.safeAreaInsets) {
+      const { top, right, bottom, left } = ctx.safeAreaInsets;
+      document.body.style.padding = `${top}px ${right}px ${bottom}px ${left}px`;
+    }
+  };
 
-app.onhostcontextchanged = (ctx) => {
-  if (ctx.theme) applyDocumentTheme(ctx.theme);
-  if (ctx.styles?.variables) applyHostStyleVariables(ctx.styles.variables);
-  if (ctx.styles?.css?.fonts) applyHostFonts(ctx.styles.css.fonts);
-  if (ctx.safeAreaInsets) {
-    const { top, right, bottom, left } = ctx.safeAreaInsets;
-    document.body.style.padding = `${top}px ${right}px ${bottom}px ${left}px`;
-  }
-};
+  app.onteardown = async () => ({ state: {} });
 
-app.onteardown = async () => ({ state: {} });
-
-await app.connect();
+  // Race connect against a 2-second timeout for standalone mode
+  await Promise.race([
+    app.connect(),
+    new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 2000))
+  ]);
+  mcpConnected = true;
+} catch {
+  // Not inside MCP host — render standalone
+}
 
 // ── Inject CSS ───────────────────────────────────────────────────────────────
 const style = document.createElement("style");
