@@ -18,8 +18,8 @@
   <ItemGroup>
     <PackageReference Include="ModelContextProtocol" Version="0.2.0-preview.2" />
     <PackageReference Include="ModelContextProtocol.AspNetCore" Version="0.2.0-preview.2" />
-    <PackageReference Include="Microsoft.AnalysisServices.AdomdClient.NetCore.retail.amd64" Version="19.84.1" />
-    <PackageReference Include="Microsoft.AnalysisServices.NetCore.retail.amd64" Version="19.84.1" />
+    <PackageReference Include="Microsoft.AnalysisServices.AdomdClient" Version="19.87.7" />
+    <PackageReference Include="Microsoft.AnalysisServices" Version="19.87.7" />
     <PackageReference Include="Azure.Identity" Version="1.13.2" />
   </ItemGroup>
 

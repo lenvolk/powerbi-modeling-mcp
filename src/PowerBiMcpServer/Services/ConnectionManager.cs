@@ -28,22 +28,44 @@ public sealed class ConnectionManager : IDisposable
         var server = new Server();
         server.Connect(connectionString);
 
-        // Generate a collision-resistant 12-char hex ID with TryAdd retry
+        return RegisterConnection(new ConnInfo
+        {
+            Id               = "",
+            Name             = name,
+            ConnectionString = connectionString,
+            Kind             = kind,
+            DatabaseName     = databaseName,
+            WorkspaceName    = workspaceName
+        }, server: server);
+    }
+
+    public string ConnectOffline(string tmdlPath)
+    {
+        if (!Directory.Exists(tmdlPath))
+            throw new DirectoryNotFoundException($"TMDL folder not found: {tmdlPath}");
+
+        var model = TmdlSerializer.DeserializeModelFromFolder(tmdlPath);
+        var name  = Path.GetFileName(Path.GetDirectoryName(tmdlPath) ?? tmdlPath);
+
+        return RegisterConnection(new ConnInfo
+        {
+            Id               = "",
+            Name             = name,
+            ConnectionString = tmdlPath, // Use path as connection string for offline
+            Kind             = ConnectionKind.PbipFolder,
+            DatabaseName     = name
+        }, offlineModel: model);
+    }
+
+    private string RegisterConnection(ConnInfo info, Server? server = null, Model? offlineModel = null)
+    {
         string id;
         ManagedConnection managed;
         do
         {
             id = Guid.NewGuid().ToString("N")[..12];
-            var info = new ConnInfo
-            {
-                Id               = id,
-                Name             = name,
-                ConnectionString = connectionString,
-                Kind             = kind,
-                DatabaseName     = databaseName,
-                WorkspaceName    = workspaceName
-            };
-            managed = new ManagedConnection(info, server);
+            info.Id = id;
+            managed = new ManagedConnection(info, server, offlineModel);
         }
         while (!_connections.TryAdd(id, managed));
 
@@ -68,6 +90,9 @@ public sealed class ConnectionManager : IDisposable
     public string ExecuteDaxQuery(string connectionId, string dax)
     {
         var conn = Get(connectionId);
+        if (conn.OfflineModel != null)
+            return "Error: DAX queries cannot be executed against offline PBIP/TMDL models. Connect to a running instance (Desktop or Fabric) to query data.";
+
         using var adomd = new AdomdConnection(conn.Info.ConnectionString);
         adomd.Open();
 
@@ -87,6 +112,9 @@ public sealed class ConnectionManager : IDisposable
     public Database GetDatabase(string connectionId)
     {
         var conn = Get(connectionId);
+        if (conn.Server == null)
+            throw new InvalidOperationException("This operation requires a live server connection, but the current connection is offline (PBIP/TMDL).");
+
         if (conn.Server.Databases.Count == 0)
             throw new InvalidOperationException("No databases on this server.");
 
@@ -99,6 +127,9 @@ public sealed class ConnectionManager : IDisposable
 
     public Model GetModel(string connectionId)
     {
+        var conn = Get(connectionId);
+        if (conn.OfflineModel != null) return conn.OfflineModel;
+
         var db = GetDatabase(connectionId);
         return db.Model ?? throw new InvalidOperationException("Database has no tabular model.");
     }
@@ -107,6 +138,14 @@ public sealed class ConnectionManager : IDisposable
     {
         if (_settings.IsReadOnly)
             throw new InvalidOperationException("Server is in read-only mode. Restart without --readonly to make changes.");
+
+        var conn = Get(connectionId);
+        if (conn.OfflineModel != null)
+        {
+            // Serialize back to folder
+            TmdlSerializer.SerializeModelToFolder(conn.OfflineModel, conn.Info.ConnectionString);
+            return;
+        }
 
         var db = GetDatabase(connectionId);
         db.Model.SaveChanges();
@@ -161,24 +200,27 @@ public sealed class ConnectionManager : IDisposable
         s.Replace("|", "\\|").Replace("\n", " ").Replace("\r", "");
 }
 
-/// <summary>Holds a TOM Server along with the connection metadata.</summary>
+/// <summary>Holds a TOM Server (online) or a Model (offline).</summary>
 public sealed class ManagedConnection : IDisposable
 {
-    public ConnInfo Info   { get; }
-    public Server   Server { get; }
+    public ConnInfo Info         { get; }
+    public Server?  Server       { get; }
+    public Model?   OfflineModel { get; }
 
     /// <summary>Serializes TOM access — TOM Server objects are not thread-safe.</summary>
     public SemaphoreSlim Lock { get; } = new(1, 1);
 
-    public ManagedConnection(ConnInfo info, Server server)
+    public ManagedConnection(ConnInfo info, Server? server, Model? offlineModel)
     {
-        Info   = info;
-        Server = server;
+        Info         = info;
+        Server       = server;
+        OfflineModel = offlineModel;
     }
 
     public void Dispose()
     {
         Lock.Dispose();
-        Server.Disconnect();
+        Server?.Disconnect();
+        // OfflineModel is just a POCO tree, no disposal needed
     }
 }

@@ -129,15 +129,19 @@ public sealed class ConnectionTools
     {
         try
         {
-            var summary = _tmdl.GetModelSummary(tmdlFolderPath);
-
             // For PBIP we don't connect via XMLA; instead we load the model in memory.
-            // Create a local server instance for TOM operations.
-            var id = _cm.Connect($"DataSource=localhost;Persist Security Info=false;",
-                Path.GetFileName(Path.GetDirectoryName(tmdlFolderPath) ?? tmdlFolderPath),
-                ConnectionKind.PbipFolder);
+            var id = _cm.ConnectOffline(tmdlFolderPath);
+            var model = _cm.GetModel(id);
 
-            return $"Loaded PBIP model from `{tmdlFolderPath}`\n\n{summary}\n\nConnection: `{id}`";
+            var sb = new StringBuilder();
+            sb.AppendLine($"# Loaded PBIP model from `{tmdlFolderPath}`");
+            sb.AppendLine($"Connection: `{id}`");
+            sb.AppendLine();
+            sb.AppendLine($"- **Tables**: {model.Tables.Count}");
+            sb.AppendLine($"- **Relationships**: {model.Relationships.Count}");
+            sb.AppendLine($"- **Measures**: {model.Tables.SelectMany(t => t.Measures).Count()}");
+
+            return sb.ToString();
         }
         catch (Exception ex)
         {

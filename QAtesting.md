@@ -1,177 +1,114 @@
-# QA Testing — Power BI Modeling MCP Server (Round 2)
+# QA Testing — Linux Branch
 
-**Date:** 2026-02-14  
-**Model:** Adventure Works DW 2020  
-**Transport:** HTTP/Streamable-HTTP on port 5100  
-**Tables in model:** Currency, Currency Rate, Customer, Date, Product, Reseller, Sales, Sales Order, Sales Reason, Sales Reason Bridge, Sales Territory
-
----
-
-## Test Summary
-
-| Category | Tests | Passed | New (Round 2) |
-|----------|-------|--------|---------------|
-| Connection | 6 | 6 | 1 (A05 disconnect feedback) |
-| Model | 2 | 2 | 0 |
-| Tables | 4 | 4 | 2 (C03, C04 validation) |
-| Columns | 5 | 5 | 3 (D03-D05 validation) |
-| Measures | 8 | 8 | 3 (E03, E04, E06 validation) |
-| Relationships | 3 | 3 | 1 (F03 Enum.TryParse) |
-| DAX Queries | 10 | 10 | 0 |
-| MCP Annotations | 5 | 5 | 5 (all new) |
-| Security | 5 | 5 | 5 (all new) |
-| Edge Cases | 4 | 4 | 0 |
-| **Total** | **52** | **52** | **20** |
-
----
-
-## Test Results
-
-### A. Connection Tests
-
-| # | Test | Result | Notes |
-|---|------|--------|-------|
-| A01 | Discover PBI Desktop instances (no fileName) | ✅ | Found Adventure Works DW 2020 |
-| A02 | Connect to Adventure Works DW 2020 | ✅ | Returns 12-char connection ID `8a41ca0acfd7` |
-| A03 | List connections (verify password redaction) | ✅ | Shows Adventure Works, Password=*** |
-| A04 | Disconnect with valid ID | ✅ | Returns "Disconnected" + post-disconnect query rejected |
-| A05 | Disconnect with invalid ID | ✅ | **NEW:** Returns "not found — it may have already been disconnected" |
-| A06 | Reconnect after disconnect | ✅ | New ID `6add6e3907d9` works |
-
-### B. Model Tests
-
-| # | Test | Result | Notes |
-|---|------|--------|-------|
-| B01 | Get model info | ✅ | Tables, relationships, compat level shown |
-| B02 | Get model stats via DAX | ✅ | Total Tables/Columns/Measures/Relationships |
-
-### C. Table Tests
-
-| # | Test | Result | Notes |
-|---|------|--------|-------|
-| C01 | List all tables | ✅ | 11 tables with markdown formatting |
-| C02 | Get Currency table details | ✅ | CurrencyKey, Currency Code, Currency, Currency Format |
-| C03 | Create table with empty name | ✅ | **NEW:** "Table name cannot be empty" |
-| C04 | Rename table with empty name | ✅ | **NEW:** "New table name cannot be empty" |
-
-### D. Column Tests
-
-| # | Test | Result | Notes |
-|---|------|--------|-------|
-| D01 | List columns in Currency | ✅ | Shows CurrencyKey + columns |
-| D02 | Get column details | ✅ | Full metadata with Data Type, SortBy, etc. |
-| D03 | Create column with invalid data type | ✅ | **NEW:** "Invalid data type 'InvalidType'. Valid values: ..." |
-| D04 | Create column with empty name | ✅ | **NEW:** "Column name cannot be empty" |
-| D05 | Rename column with empty name | ✅ | **NEW:** "New column name cannot be empty" |
-
-### E. Measure Tests
-
-| # | Test | Result | Notes |
-|---|------|--------|-------|
-| E01 | List all measures | ✅ | Returns measures from model |
-| E02 | Create measure | ✅ | "QA Test Measure" created in Currency |
-| E03 | Create measure with empty name | ✅ | **NEW:** "Measure name cannot be empty" |
-| E04 | Create measure with >256 chars name | ✅ | **NEW:** "Measure name exceeds 256 character limit" |
-| E05 | Update measure expression | ✅ | Expression updated |
-| E06 | Rename with empty new name | ✅ | **NEW:** "New measure name cannot be empty" |
-| E07 | Rename measure | ✅ | Renamed to "QA Renamed Measure" |
-| E08 | Delete measure | ✅ | Deleted and verified |
-
-### F. Relationship Tests
-
-| # | Test | Result | Notes |
-|---|------|--------|-------|
-| F01 | List relationships | ✅ | All relationships with markdown escaping |
-| F02 | Find relationships for Sales | ✅ | Shows related tables with arrows |
-| F03 | Create relationship with invalid crossFilter | ✅ | **NEW:** "Invalid cross-filter value. Valid values: ..." |
-
-### G. DAX Query Tests
-
-| # | Test | Result | Notes |
-|---|------|--------|-------|
-| G01 | Execute basic DAX query | ✅ | TOPN(5, 'Currency') returns 5 rows |
-| G02 | Preview table data | ✅ | Currency preview with 3 rows |
-| G03 | Get distinct values | ✅ | Distinct currencies returned |
-| G04 | Evaluate measure expression | ✅ | COUNTROWS result correct |
-| G05 | DMV tables info | ✅ | Storage info returned |
-| G06 | DMV measures info | ✅ | Measure definitions returned |
-| G07 | DMV relationships info | ✅ | Relationship metadata returned |
-| G08 | DAX injection (table name with quotes) | ✅ | Injection blocked with safe error |
-| G09 | Invalid DAX (no EVALUATE) | ✅ | Error with EVALUATE hint |
-| G10 | Markdown escaping in results | ✅ | Cell values properly escaped |
-
-### H. MCP Annotation Tests
-
-| # | Test | Result | Notes |
-|---|------|--------|-------|
-| H01 | tmdl_export ReadOnly=false | ✅ | **NEW:** readOnlyHint=False (was True) |
-| H02 | Delete tools Destructive=true | ✅ | **NEW:** All 5 delete/destructive tools annotated |
-| H03 | Connect tools Idempotent=false | ✅ | **NEW:** All 3 connect tools show idempotent=False |
-| H04 | 12-char connection IDs | ✅ | **NEW:** ID length=12 (was 8) |
-| H05 | Server version from assembly | ✅ | **NEW:** version=1.0.0 from assembly, not hardcoded |
-
-### I. Security Tests
-
-| # | Test | Result | Notes |
-|---|------|--------|-------|
-| I01 | tmdl_read_file with .exe extension | ✅ | **NEW:** "Access to system directory 'C:\WINDOWS' is not allowed" |
-| I01b | tmdl_read_file with .txt (non-system) | ✅ | **NEW:** "Only .tmdl and .json files can be read. Got: '.txt'" |
-| I02 | tmdl_read_file with system path | ✅ | **NEW:** "Access to system directory 'C:\WINDOWS' is not allowed" |
-| I03 | pbip_discover with C:\Windows | ✅ | **NEW:** "Access to system directory 'C:\WINDOWS' is not allowed" |
-| I05 | Disconnect reports not-found correctly | ✅ | **NEW:** "not found — it may have already been disconnected" |
-
-### J. Edge Cases
-
-| # | Test | Result | Notes |
-|---|------|--------|-------|
-| J01 | Invalid connectionId | ✅ | "Connection 'invalid12345' not found" |
-| J02 | Table not found | ✅ | "Table 'NonExistentTable' not found" |
-| J03 | topN=0 boundary | ✅ | Clamped to 1, returned 1 row |
-| J04 | Empty table name in preview | ✅ | Graceful error |
+**Branch:** `linux-mcp`
 
 ---
 
 ## Build Verification
 
-```
+```bash
+# Must pass on both Windows and Linux
 dotnet build src/PowerBiMcpServer/PowerBiMcpServer.csproj
-Build succeeded. 0 Warning(s), 0 Error(s)
+# Expected: Build succeeded. 0 Warning(s), 0 Error(s)
 ```
-
-All 52 tests passed against live Power BI Desktop (Adventure Works DW 2020).
 
 ---
 
-## Round 3 — New Tool Domain Tests (2026-02-14)
+## Linux-Specific Tests
 
-| # | Test | Result | Notes |
-|---|------|--------|-------|
-| DMV01 | DMV rels with resolved names | ✅ | Shows Sales, Currency, Product table names |
-| HIER01 | List hierarchies | ✅ | Lists all hierarchies |
-| HIER02 | Create hierarchy (Customer geo) | ✅ | 3 levels: Country Region → State Province → City |
-| HIER03 | Get hierarchy details | ✅ | Shows levels with ordinals |
-| HIER04 | Delete hierarchy | ✅ | Cleaned up |
-| HIER05 | Empty hierarchy name validation | ✅ | Returns error |
-| PERSP01 | List perspectives | ✅ | Lists existing perspectives |
-| PERSP02 | Create perspective | ✅ | "QA Test Perspective" created |
-| PERSP03 | Add table to perspective | ✅ | Currency added |
-| PERSP04 | Get perspective details | ✅ | Shows Currency |
-| PERSP05 | Remove table from perspective | ✅ | Removed |
-| PERSP06 | Delete perspective | ✅ | Cleaned up |
-| ROLE01 | List roles | ✅ | Lists existing roles |
-| ROLE02 | Create role | ✅ | "QA Test Role" with Read permission |
-| ROLE03 | Set RLS table filter | ✅ | `[CurrencyKey] < 10` |
-| ROLE04 | Get role details | ✅ | Shows filter expression |
-| ROLE05 | Clear table filter | ✅ | Filter removed |
-| ROLE06 | Delete role | ✅ | Cleaned up |
-| CALC01 | List calc groups | ✅ | Lists existing groups |
-| CALC02 | Create calc group | ✅ | "QA Time Intel" with DiscourageImplicitMeasures |
-| CALC03 | Add calc item (YTD) | ✅ | YTD with DATESYTD expression |
-| CALC04 | Get calc group details | ✅ | Shows YTD item |
-| CALC05 | Delete calc item | ✅ | YTD removed |
-| CALC06 | Delete calc group | ✅ | Cleaned up |
-| PART01 | List partitions | ✅ | All tables shown |
-| PART02 | Get partition details | ✅ | Shows M source expression |
+### L1. Build on Linux x64
 
-**26 tests, all passing.**
+```bash
+dotnet publish src/PowerBiMcpServer -c Release -r linux-x64 --no-self-contained -o publish/linux-x64
+```
+**Expected:** Publish succeeds, `publish/linux-x64/powerbi-mcp-server.dll` exists.
+
+### L2. Docker Build
+
+```bash
+docker build -t powerbi-mcp-server .
+```
+**Expected:** Image builds successfully.
+
+### L3. Docker Run + Health Check
+
+```bash
+docker run -d -p 5100:5100 --name pbi-test powerbi-mcp-server
+curl http://localhost:5100/healthz
+docker stop pbi-test && docker rm pbi-test
+```
+**Expected:** `{"status":"healthy","transport":"http","version":"1.0.0","connections":0}`
+
+### L4. stdio Transport on Linux
+
+```bash
+echo '{"jsonrpc":"2.0","method":"initialize","id":1,"params":{"capabilities":{}}}' | dotnet run --project src/PowerBiMcpServer
+```
+**Expected:** JSON-RPC response with server capabilities.
+
+### L5. Desktop Discovery on Linux (Graceful No-Op)
+
+Call `connection_connect_desktop` via MCP.
+**Expected:** Returns "No running Power BI Desktop instances found" (not a crash).
+
+### L6. Offline PBIP Load
+
+Call `connection_open_pbip` with a valid TMDL folder path.
+**Expected:** Returns connection ID, table/measure counts. No localhost connection attempted.
+
+### L7. DAX Query on Offline Connection
+
+Load a PBIP model (L6), then call `dax_query`.
+**Expected:** Returns error: "DAX queries cannot be executed against offline PBIP/TMDL models."
+
+### L8. Fabric Connection from Linux
+
+Set `PBI_MODELING_MCP_ACCESS_TOKEN` and call `connection_connect_fabric`.
+**Expected:** Connects successfully via XMLA endpoint.
+
+### L9. DAX Query via Fabric from Linux
+
+Connect to Fabric (L8), then run `dax_query` with `EVALUATE TOPN(5, 'TableName')`.
+**Expected:** Returns markdown table with 5 rows.
+
+### L10. TMDL Export on Linux
+
+Load PBIP (L6), call `tmdl_export` to a temp folder.
+**Expected:** TMDL files written to disk.
+
+### L11. SaveChanges on Offline Connection
+
+Load PBIP (L6), create a measure, verify model is serialized back to TMDL folder.
+**Expected:** `.tmdl` file updated on disk.
+
+---
+
+## Cross-Platform Tests (Run on Both Windows and Linux)
+
+### X1. Package Restore
+
+```bash
+dotnet restore src/PowerBiMcpServer/PowerBiMcpServer.csproj
+```
+**Expected:** No NU1603 warnings (version mismatch).
+
+### X2. All Tool Domains Load
+
+Start server in HTTP mode, check tool count.
+**Expected:** 69 tools discovered.
+
+### X3. Path Validation
+
+Call `tmdl_read_file` with `/etc/passwd` (Linux) or `C:\Windows\System32\config\SAM` (Windows).
+**Expected:** "Access to system directory is not allowed."
+
+---
+
+## Test Summary
+
+| Category | Tests | Platform |
+|---|---|---|
+| Linux-specific | L1–L11 | Linux x64 |
+| Cross-platform | X1–X3 | Both |
+| **Total** | **14** | — |
 

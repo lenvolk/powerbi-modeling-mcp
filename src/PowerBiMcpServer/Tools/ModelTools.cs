@@ -27,12 +27,29 @@ public sealed class ModelTools
         try
         {
             var model = _cm.GetModel(connectionId);
-            var db    = _cm.GetDatabase(connectionId);
+            // Try to get database if available, otherwise fallback (offline mode)
+            string dbName;
+            int? compatLevel = null;
+
+            try
+            {
+                var db = _cm.GetDatabase(connectionId);
+                dbName = db.Name;
+                compatLevel = db.CompatibilityLevel;
+            }
+            catch (InvalidOperationException)
+            {
+                // Offline mode
+                dbName = _cm.Get(connectionId).Info.Name;
+                // Offline model might not have database attached, but might have annotations or just default
+            }
 
             var sb = new StringBuilder(2048);
-            sb.AppendLine($"# Model: {db.Name}");
+            sb.AppendLine($"# Model: {dbName}");
             sb.AppendLine();
-            sb.AppendLine($"- **Compatibility Level**: {db.CompatibilityLevel}");
+            if (compatLevel.HasValue)
+                sb.AppendLine($"- **Compatibility Level**: {compatLevel}");
+            
             sb.AppendLine($"- **Tables**: {model.Tables.Count}");
             sb.AppendLine($"- **Relationships**: {model.Relationships.Count}");
             sb.AppendLine($"- **Cultures**: {model.Cultures.Count}");

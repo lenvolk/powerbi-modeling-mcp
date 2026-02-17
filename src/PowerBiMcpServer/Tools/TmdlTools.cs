@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text;
+using Microsoft.AnalysisServices.Tabular;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
 using PowerBiMcpServer.Models;
@@ -38,6 +39,14 @@ public sealed class TmdlTools
                 return "Error: Cannot export in read-only mode. Restart without --readonly.";
 
             folderPath = ValidatePath(folderPath);
+            
+            var conn = _cm.Get(connectionId);
+            if (conn.OfflineModel != null)
+            {
+                TmdlSerializer.SerializeModelToFolder(conn.OfflineModel, folderPath);
+                return $"Model exported to TMDL folder: `{folderPath}`";
+            }
+
             var db = _cm.GetDatabase(connectionId);
             _tmdl.SaveToFolder(db, folderPath);
             return $"Model exported to TMDL folder: `{folderPath}`";
@@ -60,9 +69,19 @@ public sealed class TmdlTools
             if (!Directory.Exists(folderPath))
                 return $"Error: Folder not found: `{folderPath}`";
 
+            var conn = _cm.Get(connectionId);
+            if (conn.OfflineModel != null)
+            {
+                // For offline, import means replacing the current model state with the one from folder
+                var imported = TmdlSerializer.DeserializeModelFromFolder(folderPath);
+                imported.CopyTo(conn.OfflineModel);
+                // Also update the source path? Maybe not necessary as SaveChanges uses original path.
+                return $"TMDL folder imported into offline model from: `{folderPath}`. Changes are in memory; use other tools to modify or save back to original location.";
+            }
+
             var db = _cm.GetDatabase(connectionId);
-            var imported = _tmdl.LoadFromFolder(folderPath);
-            imported.Model.CopyTo(db.Model);
+            var dbImported = _tmdl.LoadFromFolder(folderPath);
+            dbImported.Model.CopyTo(db.Model);
             _cm.SaveChanges(connectionId);
             return $"TMDL folder imported and model updated from: `{folderPath}`";
         }
