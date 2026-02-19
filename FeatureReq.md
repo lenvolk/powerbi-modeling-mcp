@@ -6,24 +6,60 @@ This document covers how to build, deploy, authenticate, and verify the Power BI
 
 ## Table of Contents
 
-1. [Prerequisites](#1-prerequisites)
-2. [Build the Docker Image](#2-build-the-docker-image)
-3. [Authentication](#3-authentication)
-4. [Run the Container](#4-run-the-container)
-5. [Configure Your MCP Client](#5-configure-your-mcp-client)
-6. [Verify the Deployment](#6-verify-the-deployment)
-7. [Usage Examples](#7-usage-examples)
-8. [What Was Changed (and Why)](#8-what-was-changed-and-why)
-9. [Troubleshooting](#9-troubleshooting)
+1. [Architecture Overview](#1-architecture-overview)
+2. [Prerequisites](#2-prerequisites)
+3. [Build the Docker Image](#3-build-the-docker-image)
+4. [Authentication](#4-authentication)
+5. [Run the Container](#5-run-the-container)
+6. [Configure Your MCP Client](#6-configure-your-mcp-client)
+7. [Verify the Deployment](#7-verify-the-deployment)
+8. [Usage Examples](#8-usage-examples)
+9. [What Was Changed (and Why)](#9-what-was-changed-and-why)
+10. [Troubleshooting](#10-troubleshooting)
 
 ---
 
-## 1. Prerequisites
+## 1. Architecture Overview
+
+```mermaid
+flowchart TB
+    subgraph local["Your Windows PC"]
+        subgraph vscode["VS Code"]
+            copilot["GitHub Copilot\nExtension"]
+        end
+        subgraph docker["Docker Desktop"]
+            mcp["powerbi-mcp-server\n.NET 8 · HTTP port 5100"]
+        end
+        token["Token Source\nenv var · SPN · Managed Identity"]
+    end
+
+    subgraph cloud["Microsoft Fabric (cloud)"]
+        xmla["XMLA Endpoint\npowerbi://api.powerbi.com/..."]
+        model[("Semantic Model\ntables · measures · relationships")]
+    end
+
+    copilot -- "MCP Protocol\nhttp://localhost:5100/mcp" --> mcp
+    token -. "access token" .-> mcp
+    mcp -- "HTTPS + Bearer Token\n(Server.AccessToken property)" --> xmla
+    xmla --- model
+```
+
+**How it works:**
+
+1. **GitHub Copilot** (running in VS Code on your PC) connects to the MCP server via HTTP on `localhost:5100/mcp`
+2. The **MCP server** runs inside a Docker container on your local machine — it exposes Power BI modeling tools (tables, measures, DAX, etc.) via the MCP protocol
+3. When Copilot invokes `connection_connect_fabric`, the server authenticates to Fabric's **XMLA endpoint** using a bearer token set via the `Server.AccessToken` property
+4. The token is sourced from either the `PBI_MODELING_MCP_ACCESS_TOKEN` environment variable or `DefaultAzureCredential` (service principal, managed identity, etc.)
+
+> Everything runs on your local machine except the Fabric workspace itself, which is in the cloud.
+
+---
+
+## 2. Prerequisites
 
 ### Local Machine
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker Engine on Linux)
-- [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) (`az`) — for token acquisition during development
 
 ### Microsoft Fabric / Power BI Tenant
 
@@ -42,7 +78,7 @@ These settings **must** be enabled before the XMLA endpoint will accept connecti
 
 ---
 
-## 2. Build the Docker Image
+## 3. Build the Docker Image
 
 From the repository root:
 
@@ -58,13 +94,13 @@ The image runs the server in **HTTP transport** mode on port **5100** by default
 
 ---
 
-## 3. Authentication
+## 4. Authentication
 
 The server needs a valid Azure AD / Entra ID token with scope `https://analysis.windows.net/powerbi/api/.default` to connect to Fabric XMLA endpoints. Three options are available:
 
 ### Option A: Pre-fetched Access Token (development / testing)
 
-Acquire a token using Azure CLI and pass it as an environment variable:
+Requires [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) (`az`). Acquire a token and pass it as an environment variable:
 
 **PowerShell:**
 ```powershell
@@ -121,7 +157,7 @@ When `connection_connect_fabric` is called, the server resolves the token in thi
 
 ---
 
-## 4. Run the Container
+## 5. Run the Container
 
 ### Basic run (with pre-fetched token)
 
@@ -167,7 +203,7 @@ docker run -d --name powerbi-mcp -p 5100:5100 `
 
 ---
 
-## 5. Configure Your MCP Client
+## 6. Configure Your MCP Client
 
 ### VS Code / GitHub Copilot (`.vscode/mcp.json`)
 
@@ -193,7 +229,7 @@ Create or update `.vscode/mcp.json` in your project:
 
 ---
 
-## 6. Verify the Deployment
+## 7. Verify the Deployment
 
 ### Step 1: Check the container is running
 
@@ -239,7 +275,7 @@ Parameters:
 
 ---
 
-## 7. Usage Examples
+## 8. Usage Examples
 
 ### List all tables in a model
 
@@ -277,7 +313,7 @@ Parameters:
 
 ---
 
-## 8. What Was Changed (and Why)
+## 9. What Was Changed (and Why)
 
 ### The Problem
 
@@ -324,7 +360,7 @@ Three files were modified:
 
 ---
 
-## 9. Troubleshooting
+## 10. Troubleshooting
 
 ### "Authentication failed for all authenticators"
 
@@ -334,7 +370,7 @@ Three files were modified:
 ### "XMLA endpoint not found" or connection timeout
 
 - **Cause**: XMLA endpoint not enabled or workspace not on Premium/Fabric capacity
-- **Fix**: Check the [Prerequisites](#1-prerequisites) table — all four settings must be configured
+- **Fix**: Check the [Prerequisites](#2-prerequisites) table — all four settings must be configured
 
 ### Token expired (after ~60–90 min with Option A)
 
@@ -352,7 +388,7 @@ Three files were modified:
 ### Service principal 403 / Unauthorized
 
 - **Cause**: SPN missing permissions or not added to workspace
-- **Fix**: Verify all 5 steps in [Option B](#option-b-service-principal-production--cicd) are completed
+- **Fix**: Verify all 5 steps in [Option B](#option-b-service-principal-production--cicd) under [Authentication](#4-authentication) are completed
 
 ### Container starts but health check fails
 
