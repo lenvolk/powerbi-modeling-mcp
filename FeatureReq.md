@@ -30,7 +30,7 @@ flowchart TB
         subgraph docker["Docker Desktop"]
             mcp["powerbi-mcp-server\n.NET 8 · HTTP port 5100"]
         end
-        token["Token Source\nenv var · SPN · Managed Identity"]
+        token["Token Source\nService Principal (Entra ID)"]
     end
 
     subgraph cloud["Microsoft Fabric (cloud)"]
@@ -70,8 +70,8 @@ These settings **must** be enabled before the XMLA endpoint will accept connecti
 | **XMLA endpoint enabled** | Admin Portal → Tenant settings → Integration → "Allow XMLA endpoints and Analyze in Excel" → **Enabled** |
 | **XMLA endpoint set to Read Write** | Admin Portal → Capacity settings → select your capacity → Power BI Workloads → XMLA Endpoint → **Read Write** |
 | **Workspace on Premium/Fabric capacity** | Shared/Pro capacity has **no XMLA endpoint** — requires **P1+**, **PPU**, **F2+**, or **A1+** |
-| **Service principal allowed** (if using SPN) | Admin Portal → Tenant settings → Developer settings → "Allow service principals to use Power BI APIs" → **Enabled** |
-| **Service principal is workspace member** (if using SPN) | Workspace → Manage access → Add the service principal as **Member** or **Admin** |
+| **Service principal allowed** | Admin Portal → Tenant settings → Developer settings → "Allow service principals to use Power BI APIs" → **Enabled** |
+| **Service principal is workspace member** | Workspace → Manage access → Add the service principal as **Member** or **Admin** |
 
 > **Cross-tenant (B2B/guest) users**: replace `myorg` with the tenant domain in the XMLA URL:
 > `powerbi://api.powerbi.com/v1.0/fabrikam.com/WorkspaceName`
@@ -96,22 +96,11 @@ The image runs the server in **HTTP transport** mode on port **5100** by default
 
 ## 4. Authentication
 
-The server needs a valid Azure AD / Entra ID token with scope `https://analysis.windows.net/powerbi/api/.default` to connect to Fabric XMLA endpoints. Three options are available:
+The server needs a valid Azure AD / Entra ID token with scope `https://analysis.windows.net/powerbi/api/.default` to connect to Fabric XMLA endpoints. Two options are available:
 
-### Option A: Pre-fetched Access Token (development / testing)
+### Option A: Service Principal (recommended)
 
-Requires [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) (`az`). Acquire a token and pass it as an environment variable:
-
-```bash
-TOKEN=$(az account get-access-token --resource "https://analysis.windows.net/powerbi/api" --query accessToken -o tsv)
-docker run -p 5100:5100 -e PBI_MODELING_MCP_ACCESS_TOKEN="$TOKEN" powerbi-mcp-server
-```
-
-> Tokens expire in ~60–90 minutes. Re-run the `az account get-access-token` command and restart the container when the token expires.
-
-### Option B: Service Principal (production / CI/CD)
-
-Pass Entra ID service principal credentials as environment variables. `DefaultAzureCredential` inside the container picks up `EnvironmentCredential` automatically:
+Pass Entra ID service principal credentials as environment variables. `DefaultAzureCredential` inside the container picks up `EnvironmentCredential` automatically — tokens are acquired and refreshed with no manual intervention:
 
 ```bash
 docker run -p 5100:5100 \
@@ -121,54 +110,61 @@ docker run -p 5100:5100 \
   powerbi-mcp-server
 ```
 
-**Service principal setup requirements:**
-1. Create an App Registration in Entra ID
-2. Create a client secret under Certificates & secrets
-3. Grant API permission: **Power BI Service → Dataset.ReadWrite.All** (admin-consent required)
-4. In Fabric Admin Portal: enable "Allow service principals to use Power BI APIs"
-5. Add the service principal as a **Member** or **Admin** of the target workspace
+**What to request from your identity team:**
 
-With this option, the token is acquired automatically on each `connection_connect_fabric` call — no manual token refresh needed.
+| # | Request | Details |
+|---|---|---|
+| 1 | **App Registration** | Create a new app registration in Entra ID |
+| 2 | **Client Secret** | Under the app's Certificates & secrets blade |
+| 3 | **API Permission** | **Power BI Service → Dataset.ReadWrite.All** (requires admin consent) |
+| 4 | **Tenant setting** | Admin Portal → "Allow service principals to use Power BI APIs" → **Enabled** |
+| 5 | **Workspace membership** | Add the service principal as **Member** or **Admin** of each target workspace |
 
-### Option C: Azure Managed Identity (Azure-hosted containers)
+**What you'll receive back** — three values to set as environment variables:
 
-When running on Azure Container Instances (ACI), Azure Container Apps (ACA), or AKS:
+- `AZURE_TENANT_ID` — your organization's Entra tenant ID
+- `AZURE_CLIENT_ID` — the app registration's Application (client) ID
+- `AZURE_CLIENT_SECRET` — the client secret value
+
+### Option B: Pre-fetched Access Token (quick testing only)
+
+For one-off testing, you can acquire a token manually using [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) (`az`) and pass it as an environment variable:
 
 ```bash
-# Example: assign system-managed identity to a Container App
-az containerapp identity assign -n my-app -g my-rg --system-assigned
+TOKEN=$(az account get-access-token --resource "https://analysis.windows.net/powerbi/api" --query accessToken -o tsv)
+docker run -p 5100:5100 -e PBI_MODELING_MCP_ACCESS_TOKEN="$TOKEN" powerbi-mcp-server
 ```
 
-No environment variables needed. `DefaultAzureCredential` auto-detects the managed identity. The managed identity must be added as workspace member with appropriate permissions.
+> **Warning:** Tokens expire in ~60–90 minutes. You must re-acquire the token and restart the container each time. Use Option A for anything beyond quick testing.
 
 ### Authentication Priority
 
 When `connection_connect_fabric` is called, the server resolves the token in this order:
 
-1. **`PBI_MODELING_MCP_ACCESS_TOKEN` env var** — used directly if set
-2. **`DefaultAzureCredential`** — tries (in order): environment variables (SPN), managed identity, Azure CLI, and other Azure SDK credential sources
+1. **`PBI_MODELING_MCP_ACCESS_TOKEN` env var** — used directly if set (Option B)
+2. **`DefaultAzureCredential`** — tries environment variables for SPN credentials (Option A), then other Azure SDK credential sources
 
 ---
 
 ## 5. Run the Container
 
-### Basic run (with pre-fetched token)
-
-```bash
-TOKEN=$(az account get-access-token --resource "https://analysis.windows.net/powerbi/api" --query accessToken -o tsv)
-
-docker run -d --name powerbi-mcp -p 5100:5100 \
-  -e PBI_MODELING_MCP_ACCESS_TOKEN="$TOKEN" \
-  powerbi-mcp-server
-```
-
-### Run with service principal
+### Basic run (with service principal — recommended)
 
 ```bash
 docker run -d --name powerbi-mcp -p 5100:5100 \
   -e AZURE_TENANT_ID="00000000-0000-0000-0000-000000000000" \
   -e AZURE_CLIENT_ID="11111111-1111-1111-1111-111111111111" \
   -e AZURE_CLIENT_SECRET="your-client-secret-value" \
+  powerbi-mcp-server
+```
+
+### Run with pre-fetched token (quick testing)
+
+```bash
+TOKEN=$(az account get-access-token --resource "https://analysis.windows.net/powerbi/api" --query accessToken -o tsv)
+
+docker run -d --name powerbi-mcp -p 5100:5100 \
+  -e PBI_MODELING_MCP_ACCESS_TOKEN="$TOKEN" \
   powerbi-mcp-server
 ```
 
@@ -365,10 +361,10 @@ Three files were modified:
 - **Cause**: XMLA endpoint not enabled or workspace not on Premium/Fabric capacity
 - **Fix**: Check the [Prerequisites](#2-prerequisites) table — all four settings must be configured
 
-### Token expired (after ~60–90 min with Option A)
+### Token expired (after ~60–90 min with Option B)
 
 - **Cause**: Pre-fetched tokens have a limited lifetime
-- **Fix**: Re-acquire the token and restart the container, or switch to service principal auth (Option B) for automatic renewal
+- **Fix**: Re-acquire the token and restart the container, or switch to service principal auth (Option A) for automatic renewal
 
 ### "No such host" or DNS errors
 
@@ -381,7 +377,7 @@ Three files were modified:
 ### Service principal 403 / Unauthorized
 
 - **Cause**: SPN missing permissions or not added to workspace
-- **Fix**: Verify all 5 steps in [Option B](#option-b-service-principal-production--cicd) under [Authentication](#4-authentication) are completed
+- **Fix**: Verify all 5 steps in [Option A](#option-a-service-principal-recommended) under [Authentication](#4-authentication) are completed
 
 ### Container starts but health check fails
 
@@ -399,14 +395,14 @@ Three files were modified:
 # Build
 docker build -t powerbi-mcp-server .
 
-# Run (dev — pre-fetched token)
-TOKEN=$(az account get-access-token --resource "https://analysis.windows.net/powerbi/api" --query accessToken -o tsv)
-docker run -d --name powerbi-mcp -p 5100:5100 -e PBI_MODELING_MCP_ACCESS_TOKEN="$TOKEN" powerbi-mcp-server
-
-# Run (prod — service principal)
+# Run (recommended — service principal)
 docker run -d --name powerbi-mcp -p 5100:5100 \
   -e AZURE_TENANT_ID="..." -e AZURE_CLIENT_ID="..." -e AZURE_CLIENT_SECRET="..." \
   powerbi-mcp-server
+
+# Run (quick test — pre-fetched token)
+TOKEN=$(az account get-access-token --resource "https://analysis.windows.net/powerbi/api" --query accessToken -o tsv)
+docker run -d --name powerbi-mcp -p 5100:5100 -e PBI_MODELING_MCP_ACCESS_TOKEN="$TOKEN" powerbi-mcp-server
 
 # Health check
 curl http://localhost:5100/healthz
