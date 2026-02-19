@@ -137,6 +137,18 @@ docker run -p 5100:5100 -e PBI_MODELING_MCP_ACCESS_TOKEN="$TOKEN" powerbi-mcp-se
 
 > **Warning:** Tokens expire in ~60–90 minutes. You must re-acquire the token and restart the container each time. Use Option A for anything beyond quick testing.
 
+**Account requirements for Option B:**
+
+The account you sign in with via `az login` must meet **all three** of these requirements — if any one is missing, the connection will fail:
+
+| # | Requirement | Why |
+|---|---|---|
+| 1 | **Power BI Pro or Premium Per User (PPU) license** | The XMLA endpoint is a Premium feature. Without Pro/PPU the account cannot generate a token with the correct Power BI scope. |
+| 2 | **Workspace membership** (Member, Contributor, or Admin) | The token carries the user's identity — Fabric checks whether that identity has access to the target workspace. |
+| 3 | **XMLA endpoint enabled at the tenant level** | Even with a valid token and workspace access, the XMLA endpoint must be turned on in the Admin Portal (see [Prerequisites](#2-prerequisites)). |
+
+> **Note:** A free Power BI account or a Microsoft 365 account without a Power BI license will **not** work — `az account get-access-token` will succeed (it just requests an Entra token), but the XMLA endpoint will reject the connection because the account lacks Power BI entitlements.
+
 ### Authentication Priority
 
 When `connection_connect_fabric` is called, the server resolves the token in this order:
