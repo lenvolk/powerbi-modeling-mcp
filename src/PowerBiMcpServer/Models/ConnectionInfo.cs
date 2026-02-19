@@ -9,6 +9,7 @@ public sealed class ConnectionInfo
     public required ConnectionKind Kind   { get; init; }
     public string? DatabaseName           { get; init; }
     public string? WorkspaceName          { get; init; }
+    public string? AccessToken            { get; init; }
     public DateTime ConnectedAt           { get; init; } = DateTime.UtcNow;
 }
 

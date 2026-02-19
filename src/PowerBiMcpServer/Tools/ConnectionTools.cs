@@ -85,34 +85,41 @@ public sealed class ConnectionTools
         // Escape semicolons in names to prevent connection string injection
         var safeCatalog = semanticModelName.Replace(";", "");
 
+        // Connection string WITHOUT Password — token goes via AccessToken property
+        var connectionString = $"Data Source={xmlaEndpoint};Initial Catalog={safeCatalog};";
+
         // Determine access token
         var envToken = Environment.GetEnvironmentVariable("PBI_MODELING_MCP_ACCESS_TOKEN");
-        string connectionString;
+        string accessToken;
 
         if (!string.IsNullOrEmpty(envToken))
         {
-            connectionString = $"Data Source={xmlaEndpoint};Initial Catalog={safeCatalog};"
-                             + $"Password={envToken};";
+            accessToken = envToken;
         }
         else
         {
-            // Use DefaultAzureCredential (interactive browser, managed identity, etc.)
+            // Use DefaultAzureCredential (service principal, managed identity, Azure CLI, etc.)
             try
             {
                 var credential = new DefaultAzureCredential();
-                var token = credential.GetToken(
+                var tokenResult = credential.GetToken(
                     new Azure.Core.TokenRequestContext(new[] { "https://analysis.windows.net/powerbi/api/.default" }));
-                connectionString = $"Data Source={xmlaEndpoint};Initial Catalog={safeCatalog};"
-                                 + $"Password={token.Token};";
+                accessToken = tokenResult.Token;
             }
             catch (Exception ex)
             {
-                return $"Error: Authentication failed. Set PBI_MODELING_MCP_ACCESS_TOKEN or sign in via Azure CLI.\n{ex.Message}";
+                return "Error: Authentication failed.\n\n"
+                     + "To authenticate, use one of:\n"
+                     + "1. Set `PBI_MODELING_MCP_ACCESS_TOKEN` env var with a valid access token\n"
+                     + "2. Set `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` for service principal auth\n"
+                     + "3. Use managed identity when running on Azure (ACI, ACA, AKS)\n\n"
+                     + $"Details: {ex.Message}";
             }
         }
 
+        // Pass token separately — ConnectionManager uses Server.AccessToken property
         var id = _cm.Connect(connectionString, semanticModelName, ConnectionKind.FabricWorkspace,
-            databaseName: semanticModelName, workspaceName: workspaceName);
+            databaseName: semanticModelName, workspaceName: workspaceName, accessToken: accessToken);
 
         return $"Connected to **{semanticModelName}** in workspace **{workspaceName}** (connection `{id}`).";
     }

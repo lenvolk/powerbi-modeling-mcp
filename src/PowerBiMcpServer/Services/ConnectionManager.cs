@@ -3,6 +3,7 @@ using Microsoft.AnalysisServices.Tabular;
 using Microsoft.AnalysisServices.AdomdClient;
 using PowerBiMcpServer.Models;
 using ConnInfo = PowerBiMcpServer.Models.ConnectionInfo;
+using AsAccessToken = Microsoft.AnalysisServices.AccessToken;
 
 namespace PowerBiMcpServer.Services;
 
@@ -23,9 +24,17 @@ public sealed class ConnectionManager : IDisposable
     // ── Connect ─────────────────────────────────────────────────────────────
 
     public string Connect(string connectionString, string name, ConnectionKind kind,
-        string? databaseName = null, string? workspaceName = null)
+        string? databaseName = null, string? workspaceName = null, string? accessToken = null)
     {
         var server = new Server();
+
+        if (!string.IsNullOrEmpty(accessToken))
+        {
+            // Set AccessToken BEFORE connecting — bypasses MSAL authenticator chain entirely.
+            // This is critical for Linux/Docker where MSAL interactive authenticators all fail.
+            server.AccessToken = new AsAccessToken(accessToken, DateTimeOffset.UtcNow.AddHours(1));
+        }
+
         server.Connect(connectionString);
 
         return RegisterConnection(new ConnInfo
@@ -35,7 +44,8 @@ public sealed class ConnectionManager : IDisposable
             ConnectionString = connectionString,
             Kind             = kind,
             DatabaseName     = databaseName,
-            WorkspaceName    = workspaceName
+            WorkspaceName    = workspaceName,
+            AccessToken      = accessToken
         }, server: server);
     }
 
@@ -94,6 +104,13 @@ public sealed class ConnectionManager : IDisposable
             return "Error: DAX queries cannot be executed against offline PBIP/TMDL models. Connect to a running instance (Desktop or Fabric) to query data.";
 
         using var adomd = new AdomdConnection(conn.Info.ConnectionString);
+
+        if (!string.IsNullOrEmpty(conn.Info.AccessToken))
+        {
+            // Set AccessToken on ADOMD connection — bypasses MSAL authenticator chain.
+            adomd.AccessToken = new AsAccessToken(conn.Info.AccessToken, DateTimeOffset.UtcNow.AddHours(1));
+        }
+
         adomd.Open();
 
         if (!string.IsNullOrEmpty(conn.Info.DatabaseName))
