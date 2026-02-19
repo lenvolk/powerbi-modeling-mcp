@@ -23,7 +23,7 @@ This document covers how to build, deploy, authenticate, and verify the Power BI
 
 ```mermaid
 flowchart TB
-    subgraph local["Your Windows PC"]
+    subgraph local["Your Linux Workstation"]
         subgraph vscode["VS Code"]
             copilot["GitHub Copilot\nExtension"]
         end
@@ -46,12 +46,12 @@ flowchart TB
 
 **How it works:**
 
-1. **GitHub Copilot** (running in VS Code on your PC) connects to the MCP server via HTTP on `localhost:5100/mcp`
+1. **GitHub Copilot** (running in VS Code on your machine) connects to the MCP server via HTTP on `localhost:5100/mcp`
 2. The **MCP server** runs inside a Docker container on your local machine — it exposes Power BI modeling tools (tables, measures, DAX, etc.) via the MCP protocol
 3. When Copilot invokes `connection_connect_fabric`, the server authenticates to Fabric's **XMLA endpoint** using a bearer token set via the `Server.AccessToken` property
 4. The token is sourced from either the `PBI_MODELING_MCP_ACCESS_TOKEN` environment variable or `DefaultAzureCredential` (service principal, managed identity, etc.)
 
-> Everything runs on your local machine except the Fabric workspace itself, which is in the cloud.
+> Everything runs locally on your Linux machine except the Fabric workspace itself, which is in the cloud.
 
 ---
 
@@ -59,7 +59,7 @@ flowchart TB
 
 ### Local Machine
 
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker Engine on Linux)
+- [Docker Engine](https://docs.docker.com/engine/install/) (or [Docker Desktop for Linux](https://docs.docker.com/desktop/setup/install/linux/))
 
 ### Microsoft Fabric / Power BI Tenant
 
@@ -102,13 +102,6 @@ The server needs a valid Azure AD / Entra ID token with scope `https://analysis.
 
 Requires [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) (`az`). Acquire a token and pass it as an environment variable:
 
-**PowerShell:**
-```powershell
-$TOKEN = az account get-access-token --resource "https://analysis.windows.net/powerbi/api" --query accessToken -o tsv
-docker run -p 5100:5100 -e PBI_MODELING_MCP_ACCESS_TOKEN="$TOKEN" powerbi-mcp-server
-```
-
-**Bash / WSL:**
 ```bash
 TOKEN=$(az account get-access-token --resource "https://analysis.windows.net/powerbi/api" --query accessToken -o tsv)
 docker run -p 5100:5100 -e PBI_MODELING_MCP_ACCESS_TOKEN="$TOKEN" powerbi-mcp-server
@@ -161,21 +154,21 @@ When `connection_connect_fabric` is called, the server resolves the token in thi
 
 ### Basic run (with pre-fetched token)
 
-```powershell
-$TOKEN = az account get-access-token --resource "https://analysis.windows.net/powerbi/api" --query accessToken -o tsv
+```bash
+TOKEN=$(az account get-access-token --resource "https://analysis.windows.net/powerbi/api" --query accessToken -o tsv)
 
-docker run -d --name powerbi-mcp -p 5100:5100 `
-  -e PBI_MODELING_MCP_ACCESS_TOKEN="$TOKEN" `
+docker run -d --name powerbi-mcp -p 5100:5100 \
+  -e PBI_MODELING_MCP_ACCESS_TOKEN="$TOKEN" \
   powerbi-mcp-server
 ```
 
 ### Run with service principal
 
-```powershell
-docker run -d --name powerbi-mcp -p 5100:5100 `
-  -e AZURE_TENANT_ID="00000000-0000-0000-0000-000000000000" `
-  -e AZURE_CLIENT_ID="11111111-1111-1111-1111-111111111111" `
-  -e AZURE_CLIENT_SECRET="your-client-secret-value" `
+```bash
+docker run -d --name powerbi-mcp -p 5100:5100 \
+  -e AZURE_TENANT_ID="00000000-0000-0000-0000-000000000000" \
+  -e AZURE_CLIENT_ID="11111111-1111-1111-1111-111111111111" \
+  -e AZURE_CLIENT_SECRET="your-client-secret-value" \
   powerbi-mcp-server
 ```
 
@@ -183,10 +176,10 @@ docker run -d --name powerbi-mcp -p 5100:5100 `
 
 Append `--readonly` to prevent any write operations:
 
-```powershell
-docker run -d --name powerbi-mcp -p 5100:5100 `
-  -e PBI_MODELING_MCP_ACCESS_TOKEN="$TOKEN" `
-  powerbi-mcp-server `
+```bash
+docker run -d --name powerbi-mcp -p 5100:5100 \
+  -e PBI_MODELING_MCP_ACCESS_TOKEN="$TOKEN" \
+  powerbi-mcp-server \
   dotnet powerbi-mcp-server.dll --transport http --host 0.0.0.0 --port 5100 --readonly
 ```
 
@@ -194,8 +187,8 @@ docker run -d --name powerbi-mcp -p 5100:5100 `
 
 | Flag | Default | Description |
 |---|---|---|
-| `--transport` | `http` (in Docker) | `stdio` or `http` |
-| `--host` | `0.0.0.0` (in Docker) | Bind address |
+| `--transport` | `http` | `stdio` or `http` |
+| `--host` | `0.0.0.0` | Bind address |
 | `--port` | `5100` | Listen port |
 | `--readonly` | off | Block all write operations |
 | `--skipconfirmation` | off | Skip write confirmations |
@@ -402,17 +395,17 @@ Three files were modified:
 
 ## Quick Reference
 
-```powershell
+```bash
 # Build
 docker build -t powerbi-mcp-server .
 
 # Run (dev — pre-fetched token)
-$TOKEN = az account get-access-token --resource "https://analysis.windows.net/powerbi/api" --query accessToken -o tsv
+TOKEN=$(az account get-access-token --resource "https://analysis.windows.net/powerbi/api" --query accessToken -o tsv)
 docker run -d --name powerbi-mcp -p 5100:5100 -e PBI_MODELING_MCP_ACCESS_TOKEN="$TOKEN" powerbi-mcp-server
 
 # Run (prod — service principal)
-docker run -d --name powerbi-mcp -p 5100:5100 `
-  -e AZURE_TENANT_ID="..." -e AZURE_CLIENT_ID="..." -e AZURE_CLIENT_SECRET="..." `
+docker run -d --name powerbi-mcp -p 5100:5100 \
+  -e AZURE_TENANT_ID="..." -e AZURE_CLIENT_ID="..." -e AZURE_CLIENT_SECRET="..." \
   powerbi-mcp-server
 
 # Health check
