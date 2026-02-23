@@ -79,49 +79,53 @@ public sealed class ConnectionTools
         [Description("Name of the Fabric workspace")] string workspaceName,
         [Description("Name of the semantic model (database)")] string semanticModelName)
     {
-        // Build XMLA endpoint
-        var xmlaEndpoint = $"powerbi://api.powerbi.com/v1.0/myorg/{Uri.EscapeDataString(workspaceName)}";
-
-        // Escape semicolons in names to prevent connection string injection
-        var safeCatalog = semanticModelName.Replace(";", "");
-
-        // Connection string WITHOUT Password — token goes via AccessToken property
-        var connectionString = $"Data Source={xmlaEndpoint};Initial Catalog={safeCatalog};";
-
-        // Determine access token
-        var envToken = Environment.GetEnvironmentVariable("PBI_MODELING_MCP_ACCESS_TOKEN");
-        string accessToken;
-
-        if (!string.IsNullOrEmpty(envToken))
+        try
         {
-            accessToken = envToken;
-        }
-        else
-        {
-            // Use DefaultAzureCredential (service principal, managed identity, Azure CLI, etc.)
-            try
-            {
-                var credential = new DefaultAzureCredential();
-                var tokenResult = credential.GetToken(
-                    new Azure.Core.TokenRequestContext(new[] { "https://analysis.windows.net/powerbi/api/.default" }));
-                accessToken = tokenResult.Token;
-            }
-            catch (Exception ex)
-            {
-                return "Error: Authentication failed.\n\n"
-                     + "To authenticate, use one of:\n"
-                     + "1. Set `PBI_MODELING_MCP_ACCESS_TOKEN` env var with a valid access token\n"
-                     + "2. Set `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` for service principal auth\n"
-                     + "3. Use managed identity when running on Azure (ACI, ACA, AKS)\n\n"
-                     + $"Details: {ex.Message}";
-            }
-        }
+            // Build XMLA endpoint
+            var xmlaEndpoint = $"powerbi://api.powerbi.com/v1.0/myorg/{Uri.EscapeDataString(workspaceName)}";
 
-        // Pass token separately — ConnectionManager uses Server.AccessToken property
-        var id = _cm.Connect(connectionString, semanticModelName, ConnectionKind.FabricWorkspace,
-            databaseName: semanticModelName, workspaceName: workspaceName, accessToken: accessToken);
+            // Escape semicolons in names to prevent connection string injection
+            var safeCatalog = semanticModelName.Replace(";", "");
 
-        return $"Connected to **{semanticModelName}** in workspace **{workspaceName}** (connection `{id}`).";
+            // Connection string WITHOUT Password — token goes via AccessToken property
+            var connectionString = $"Data Source={xmlaEndpoint};Initial Catalog={safeCatalog};";
+
+            // Determine access token
+            var envToken = Environment.GetEnvironmentVariable("PBI_MODELING_MCP_ACCESS_TOKEN");
+            string accessToken;
+
+            if (!string.IsNullOrEmpty(envToken))
+            {
+                accessToken = envToken;
+            }
+            else
+            {
+                // Use DefaultAzureCredential (service principal, managed identity, Azure CLI, etc.)
+                try
+                {
+                    var credential = new DefaultAzureCredential();
+                    var tokenResult = credential.GetToken(
+                        new Azure.Core.TokenRequestContext(new[] { "https://analysis.windows.net/powerbi/api/.default" }));
+                    accessToken = tokenResult.Token;
+                }
+                catch (Exception ex)
+                {
+                    return "Error: Authentication failed.\n\n"
+                         + "To authenticate, use one of:\n"
+                         + "1. Set `PBI_MODELING_MCP_ACCESS_TOKEN` env var with a valid access token\n"
+                         + "2. Set `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` for service principal auth\n"
+                         + "3. Use managed identity when running on Azure (ACI, ACA, AKS)\n\n"
+                         + $"Details: {ex.Message}";
+                }
+            }
+
+            // Pass token separately — ConnectionManager uses Server.AccessToken property
+            var id = _cm.Connect(connectionString, semanticModelName, ConnectionKind.FabricWorkspace,
+                databaseName: semanticModelName, workspaceName: workspaceName, accessToken: accessToken);
+
+            return $"Connected to **{semanticModelName}** in workspace **{workspaceName}** (connection `{id}`).";
+        }
+        catch (Exception ex) { return $"Error connecting to Fabric workspace: {ex.Message}"; }
     }
 
     // ── PBIP / TMDL ─────────────────────────────────────────────────────────
