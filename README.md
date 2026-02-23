@@ -1,3 +1,5 @@
+[RemoteMCP](https://learn.microsoft.com/en-us/power-bi/developer/mcp/remote-mcp-server-get-started)
+
 # Power BI Modeling MCP Server — Linux Edition
 
 Open-source C#/.NET 8 MCP server for Power BI semantic models. Runs on **Linux x64** and **Windows**. Supports **stdio** and **HTTP** transports.
